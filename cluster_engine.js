@@ -37,6 +37,7 @@ async function run() {
 
     // 4. Multi-Stage Generation for 15,000+ chars (English)
     console.log("🧠 Starting Multi-Stage English Generation...");
+    const wait = (ms) => new Promise(res => setTimeout(res, ms));
     
     // Stage 1: Intro & Analysis
     const prompt1 = `Topic: "${targetTopic}"\nSearch Data:\n${searchContext}\n\n
@@ -47,7 +48,8 @@ async function run() {
     - Respond strictly in HTML format.`;
     const res1 = await model.generateContent(prompt1);
     const stage1Html = res1.response.text().replace(/```html|```/g, '').trim();
-    console.log("✅ Stage 1 Completed");
+    console.log("✅ Stage 1 Completed. Waiting 10s for Cooldown...");
+    await wait(10000);
 
     // Stage 2: Strategy & Case Studies
     const prompt2 = `Continue from the previous content and write [Part 2: Detailed Strategies, Comparison, and Real-world Cases].\n
@@ -58,7 +60,8 @@ async function run() {
     - Respond strictly in HTML format.`;
     const res2 = await model.generateContent(prompt2);
     const stage2Html = res2.response.text().replace(/```html|```/g, '').trim();
-    console.log("✅ Stage 2 Completed");
+    console.log("✅ Stage 2 Completed. Waiting 10s for Cooldown...");
+    await wait(10000);
 
     // Stage 3: FAQ 25 & Executive Conclusion
     const prompt3 = `Finally, write [Part 3: Comprehensive FAQ (25 items) & Executive Conclusion].\n
