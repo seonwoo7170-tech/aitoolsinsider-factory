@@ -15,7 +15,7 @@ jobs:
         with:
           node-version: '20'
       - name: Install Dependencies
-        run: npm install googleapis @google.generative-ai axios
+        run: npm install googleapis @google/generative-ai axios
       - name: Run Cluster Engine
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
