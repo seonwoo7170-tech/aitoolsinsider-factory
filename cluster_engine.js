@@ -5,137 +5,71 @@ const fs = require('fs');
 const axios = require('axios');
 
 async function run() {
-    console.log("🚀 VUE Cluster Engine v2.1 Starting...");
+    console.log("🔥 VUE Precision Bombing Engine v3.0 Starting...");
     const config = JSON.parse(fs.readFileSync('cluster_config.json', 'utf8'));
+    const dayIndex = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
+    const targetTopic = config.clusters[dayIndex % config.clusters.length];
     
-    // 1. Pick Topic
-    const topicIdx = Math.floor(Math.random() * config.clusters.length);
-    const targetTopic = config.clusters[topicIdx];
-    console.log("📝 Target Topic: " + targetTopic);
+    console.log("🎯 Today's Target Topic: " + targetTopic);
+    const angles = ["Expert Comprehensive Guide", "Real-world Applications & Cases", "Professional Tool Comparison", "Crucial Mistakes & Solutions", "Future Trends & Long-term Strategy"];
 
-    // 2. Search for real-time data via Serper
-    let searchContext = "";
-    if (process.env.SERPER_API_KEY) {
-        console.log("🔍 Searching real-time data for: " + targetTopic);
-        try {
-            const searchRes = await axios.post('https://google.serper.dev/search', {
-                q: targetTopic
-            }, {
-                headers: { 'X-API-KEY': process.env.SERPER_API_KEY, 'Content-Type': 'application/json' }
-            });
-            if (searchRes.data.organic) {
-                searchContext = searchRes.data.organic.slice(0, 5).map(item => 
-                    `[Search Result] Title: ${item.title}\nSnippet: ${item.snippet}\nLink: ${item.link}`
-                ).join('\n\n');
-            }
-        } catch (e) { console.warn("Search failed, proceeding without real-time data."); }
-    }
-
-    // 3. Setup Gemini
+    const wait = (ms) => new Promise(r => setTimeout(r, ms));
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
-    // 4. Multi-Stage Generation for 15,000+ chars (English)
-    console.log("🧠 Starting Multi-Stage English Generation...");
-    const wait = (ms) => new Promise(res => setTimeout(res, ms));
-    
-    // Stage 0: SEO Optimized Title (Long-tail)
-    console.log("🎯 Generating SEO Long-tail Title...");
-    const titlePrompt = `Topic: "${targetTopic}"\nSearch context: ${searchContext.substring(0, 1000)}\n\n
-    Create a highly attractive, SEO-optimized long-tail keyword title for a premium blog post about "${targetTopic}".
-    - Focus on high CTR and specific long-tail keywords.
-    - language: English
-    - Respond only with the title string, no quotes.`;
-    const titleRes = await model.generateContent(titlePrompt);
-    const seoTitle = titleRes.response.text().trim();
-    console.log("✨ Optimized Title: " + seoTitle);
+    for (let i = 0; i < 5; i++) {
+        console.log(`\n📦 [Post ${i+1}/5] Angle: ${angles[i]}`);
 
-    // Stage 1: Intro & Analysis
-    const prompt1 = `Title: "${seoTitle}"\nTopic: "${targetTopic}"\nSearch Data:\n${searchContext}\n\n
-    You are the "Origin Master" of Studio VUE. Write the [Part 1: In-depth Introduction & Market Analysis] of a 4,000-word blog post.
-    - Title: ${seoTitle}
-    - Topic: ${targetTopic}
-    - language: English (Professional, Native-level)
-    - Minimum 1,500 words for this part.
-    - Include detailed analysis based on the search data and the SEO title context.
-    - IMPORTANT: Respond ONLY with HTML fragments (h2, p, ul, etc.). DO NOT include <html>, <head>, or <body> tags.`;
-    const res1 = await model.generateContent(prompt1);
-    const stage1Html = res1.response.text().replace(/```html|```/g, '').trim();
-    console.log("✅ Stage 1 Completed. Waiting 10s for Cooldown...");
-    await wait(10000);
-
-    // Stage 2: Strategy & Case Studies
-    const prompt2 = `Title: "${seoTitle}"\nTopic: "${targetTopic}"\n\nContinue from the previous content and write [Part 2: Detailed Strategies, Comparison, and Real-world Cases].\n
-    Context Summary of Part 1: ${stage1Html.substring(0, 1000)}...\n
-    - Title: ${seoTitle}
-    - Topic: ${targetTopic} (Focus specifically on strategies and cases related to this topic!)
-    - language: English
-    - Minimum 1,500 words for this part.
-    - Ensure a seamless transition from Part 1.
-    - IMPORTANT: Respond ONLY with HTML fragments. NO <html>/<body> tags.`;
-    const res2 = await model.generateContent(prompt2);
-    const stage2Html = res2.response.text().replace(/```html|```/g, '').trim();
-    console.log("✅ Stage 2 Completed. Waiting 10s for Cooldown...");
-    await wait(10000);
-
-    // Stage 3: FAQ 25 & Executive Conclusion
-    const prompt3 = `Title: "${seoTitle}"\nTopic: "${targetTopic}"\n\nFinally, write [Part 3: Comprehensive FAQ (25 items specifically about ${targetTopic}) & Executive Conclusion].\n
-    - Title: ${seoTitle}
-    - Topic: ${targetTopic} (EVERY FAQ MUST BE DIRECTLY RELEVANT TO THIS TOPIC. NO PLACEHOLDERS.)
-    - language: English
-    - Minimum 1,000 words for this part.
-    - The FAQ must be professional and insightful for potential investors/users.
-    - Conclusion should be a strong call-to-action.
-    - IMPORTANT: Respond ONLY with HTML fragments. NO <html>/<body> tags.`;
-    const res3 = await model.generateContent(prompt3);
-    const stage3Html = res3.response.text().replace(/```html|```/g, '').trim();
-    console.log("✅ Stage 3 Completed (Full English Content Ready!)");
-
-    const htmlContent = `<div class="vue-content-body">` + stage1Html + "\n\n" + stage2Html + "\n\n" + stage3Html + `</div>`;
-
-    // 5. Handle Image
-    let imageUrl = "";
-    if (process.env.IMGBB_API_KEY) {
-        console.log("🎨 Generating thumbnail...");
-        const imgPrompt = `Professional cinematic photography of ${targetTopic}, highly detailed, premium aesthetic. Context: ${seoTitle}`;
+        // Search Context
+        let searchContext = "";
         try {
-            const pollinationUrl = "https://image.pollinations.ai/prompt/" + encodeURIComponent(imgPrompt) + "?width=1280&height=720&nologo=true";
-            const imgRes = await axios.get(pollinationUrl, { responseType: 'arraybuffer' });
-            const base64Img = Buffer.from(imgRes.data, 'binary').toString('base64');
-            
-            const formData = new URLSearchParams();
-            formData.append('image', base64Img);
-            const imgbbRes = await axios.post("https://api.imgbb.com/1/upload?key=" + process.env.IMGBB_API_KEY, formData);
-            imageUrl = imgbbRes.data.data.url;
-            console.log("📸 Image Uploaded: " + imageUrl);
-        } catch(e) { console.error("Image gen failed cover", e); }
-    }
+            const sRes = await axios.post('https://google.serper.dev/search', { q: targetTopic + " " + angles[i] }, { headers: { 'X-API-KEY': process.env.SERPER_API_KEY } });
+            if (sRes.data.organic) searchContext = sRes.data.organic.slice(0, 3).map(o => o.snippet).join("\n");
+        } catch(e) {}
 
-    const finalHtml = (imageUrl ? `<div style="text-align:center;margin-bottom:30px;"><img src="${imageUrl}" alt="${targetTopic}" style="width:100%;border-radius:20px;box-shadow:0 10px 30px rgba(0,0,0,0.1)"></div>` : "") + htmlContent;
+        // Title Gen
+        const tRes = await model.generateContent(`Target: "${targetTopic}". Angle: "${angles[i]}". Generate a high-CTR SEO long-tail title. English only. No quotes.`);
+        const seoTitle = tRes.response.text().trim();
+        console.log("✨ Generated Title: " + seoTitle);
 
-    // 6. Post to Blogger
-    console.log("📡 Connecting to Blogger API...");
-    const oauth2Client = new google.auth.OAuth2(
-        process.env.GOOGLE_CLIENT_ID,
-        process.env.GOOGLE_CLIENT_SECRET,
-        'https://developers.google.com/oauthplayground'
-    );
-    oauth2Client.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
-    const blogger = google.blogger({ version: 'v3', auth: oauth2Client });
+        // Multi-Stage Body
+        const h1Res = await model.generateContent(`Title: ${seoTitle}. Part 1: Introduction & Depth Analysis. Min 1500 words. HTML fragments only.`);
+        const h1 = h1Res.response.text().replace(/```html|```/g, '').trim();
+        await wait(2000);
 
-    await blogger.posts.insert({
-        blogId: process.env.BLOG_ID,
-        requestBody: {
-            title: seoTitle,
-            content: finalHtml,
-            labels: ["AI Tool", "Studio VUE Cluster"]
+        const h2Res = await model.generateContent(`Title: ${seoTitle}. Part 2: Strategies & Detailed Cases. Min 1500 words. HTML fragments only.`);
+        const h2 = h2Res.response.text().replace(/```html|```/g, '').trim();
+        await wait(2000);
+
+        const h3Res = await model.generateContent(`Title: ${seoTitle}. Part 3: FAQ & Executive Conclusion. Min 1000 words. HTML fragments only.`);
+        const h3 = h3Res.response.text().replace(/```html|```/g, '').trim();
+
+        const fullHtml = `<div class="vue-content-body">` + h1 + h2 + h3 + `</div>`;
+
+        // Image Handling
+        let imageUrl = "";
+        try {
+            const pUrl = "https://image.pollinations.ai/prompt/" + encodeURIComponent(`Cinematic photography of ${targetTopic}, ${angles[i]}, premium, 8k`) + "?width=1280&height=720&nologo=true";
+            const imgBuffer = await axios.get(pUrl, { responseType: 'arraybuffer' });
+            const base64 = Buffer.from(imgBuffer.data).toString('base64');
+            const imgbb = await axios.post("https://api.imgbb.com/1/upload?key=" + process.env.IMGBB_API_KEY, new URLSearchParams({ image: base64 }));
+            imageUrl = imgbb.data.data.url;
+        } catch(e) { console.warn("Image fail:", e.message); }
+
+        const finalBody = (imageUrl ? `<div style="text-align:center;margin-bottom:30px;"><img src="${imageUrl}" style="width:100%;border-radius:20px;box-shadow:0 10px 30px rgba(0,0,0,0.1)"></div>` : "") + fullHtml;
+
+        // Post to Blogger
+        const auth = new google.auth.OAuth2(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET, 'https://developers.google.com/oauthplayground');
+        auth.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
+        const blogger = google.blogger({ version: 'v3', auth });
+        await blogger.posts.insert({ blogId: process.env.BLOG_ID, requestBody: { title: seoTitle, content: finalBody, labels: ["VUE Cluster", targetTopic] } });
+
+        console.log(`✅ Post ${i+1} completed!`);
+        if (i < 4) {
+            console.log("⏳ Waiting 3 minutes...");
+            await wait(180000);
         }
-    });
-
-    console.log("✅ Post completed successfully in English!");
+    }
+    console.log("🏆 Full Cluster Bombing Finished!");
 }
-
-run().catch(err => {
-    console.error("❌ Critical Error:", err);
-    process.exit(1);
-});
+run().catch(e => { console.error(e); process.exit(1); });
