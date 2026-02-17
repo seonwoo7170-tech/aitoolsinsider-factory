@@ -123,37 +123,38 @@ async function run() {
     let fullContext = "";
 
     for(let p=0; p < targetChapters.length; p++) {
-        console.log(`📘 Step 4.${p+1}: Crafting ${targetChapters[p].theme}...`);
+        console.log("📘 Step 4." + (p+1) + ": Crafting " + targetChapters[p].theme + "...");
         let subImgHtml = "";
         const imgMarkers = isEn ? [2, 4, 6] : [1, 2, 3];
         if(imgMarkers.includes(p)) {
-            console.log(`🎨 Generating contextual image for Part ${p+1}...`);
-            const subImgUrl = await genImg(`${title} - ${targetChapters[p].theme}`, process.env.KIE_API_KEY);
-            if(subImgUrl) subImgHtml = BT + `<div class="vue-main-thumb" style="height:380px;margin-top:6rem;"><img src="${subImgUrl}"></div>` + BT + ";
+            console.log("🎨 Generating contextual image for Part " + (p+1) + "...");
+            const subImgUrl = await genImg(title + " - " + targetChapters[p].theme, process.env.KIE_API_KEY);
+            if(subImgUrl) subImgHtml = BT + "<div class='vue-main-thumb' style='height:380px;margin-top:6rem;'><img src='" + subImgUrl + "'></div>" + BT + ";
         }
-        const segmentPrompt = `[🚨 MASTER PLATINUM SEQUENTIAL WRITING: ${isEn ? '5,000 WORDS TARGET' : '15,000 CHARS TARGET'}]\n` +
-            `This is Part ${p+1} of ${targetChapters.length}. TITLE: "${title}"\n` +
-            `CHAPTER THEME: ${targetChapters[p].theme}. TONE: ${targetChapters[p].tone}\n\n` +
-            `[FULL PREVIOUS NARRATIVE - DO NOT REPEAT]:\n${fullContext.substring(fullContext.length - 2000)}\n\n` +
-            `[CORE RULES FROM PLATINUM GUIDELINE]:\n` +
-            `1. Narrative: Use 1st-person story (e.g., "I found that...", "When I first tried...").\n` +
-            `2. Style: Mix short, punchy sentences with long, flowing expert sentences.\n` +
-            `3. Human Touch: Use metaphors related to daily life.\n` +
-            `4. NO FILLER: Start immediately with the core problem/solution.\n` +
-            `5. LENGTH: Target ${chapterLength} characters for this specific chunk.\n` +
-            `6. Visual: Include 1 <table> or <blockquote class='vue-tip'>.\n` +
-            `7. Language: Write in ${lang}.\n`;
+        const segHead = isEn ? '5,000 WORDS TARGET' : '15,000 CHARS TARGET';
+        const segmentPrompt = "[🚨 MASTER PLATINUM SEQUENTIAL WRITING: " + segHead + "]\n" +
+            "This is Part " + (p+1) + " of " + targetChapters.length + ". TITLE: \"" + title + "\"\n" +
+            "CHAPTER THEME: " + targetChapters[p].theme + ". TONE: " + targetChapters[p].tone + "\n\n" +
+            "[FULL PREVIOUS NARRATIVE - DO NOT REPEAT]:\n" + fullContext.substring(fullContext.length - 2000) + "\n\n" +
+            "[CORE RULES FROM PLATINUM GUIDELINE]:\n" +
+            "1. Narrative: Use 1st-person story (e.g., \"I found that...\", \"When I first tried...\").\n" +
+            "2. Style: Mix short, punchy sentences with long, flowing expert sentences.\n" +
+            "3. Human Touch: Use metaphors related to daily life.\n" +
+            "4. NO FILLER: Start immediately with the core problem/solution.\n" +
+            "5. LENGTH: Target " + chapterLength + " characters for this specific chunk.\n" +
+            "6. Visual: Include 1 <table> or <blockquote class='vue-tip'>.\n" +
+            "7. Language: Write in " + lang + ".\n";
         const content = clean(await callAI(model, segmentPrompt, true));
         body += subImgHtml + content;
-        fullContext += `\n/* PART ${p+1} */\n` + content;
+        fullContext += "\n/* PART " + (p+1) + " */\n" + content;
     }
 
     console.log("❓ Step 5: Generating FAQs...");
-    const faqR = await callAI(model, `Based on the full article, generate 20 high-value, non-generic FAQs for "${title}" in ${lang}. JSON array of {q, a}.`, false);
+    const faqR = await callAI(model, "Based on the full article, generate 20 high-value, non-generic FAQs for \"" + title + "\" in " + lang + ". JSON array of {q, a}.", false);
     try {
         const faqs = JSON.parse(faqR.substring(faqR.indexOf('['), faqR.lastIndexOf(']') + 1));
         let fH = BT + "<div class='vue-ad-slot'></div><div style='background:#fdfdfd;border-radius:24px;padding:3rem;margin-top:6rem;border:2px solid #f1f5f9;box-shadow:0 10px 30px rgba(0,0,0,0.02);'><div style='font-size:1.8rem;font-weight:900;color:#1e293b;margin-bottom:3rem;border-bottom:4px solid #6366f1;display:inline-block;padding-bottom:10px;'>Questions & Expert Insights</div>" + BT + ";
-        faqs.forEach(f => { if(f.q && f.a) fH += BT + "<div style='margin-bottom:2rem;padding-bottom:1.5rem;border-bottom:1px solid #f1f5f9;'><span style='font-weight:800;color:#0f172a;font-size:1.2rem;display:flex;align-items:flex-start;gap:12px;'><b style='color:#6366f1;font-family:Outfit;'>Q.</b> ${f.q}</span><p style='color:#475569;font-size:1.05rem;line-height:2.0;margin-top:10px;'>${f.a}</p></div>" + BT + "; });
+        faqs.forEach(f => { if(f.q && f.a) fH += BT + "<div style='margin-bottom:2rem;padding-bottom:1.5rem;border-bottom:1px solid #f1f5f9;'><span style='font-weight:800;color:#0f172a;font-size:1.2rem;display:flex;align-items:flex-start;gap:12px;'><b style='color:#6366f1;font-family:Outfit;'>Q.</b> " + f.q + "</span><p style='color:#475569;font-size:1.05rem;line-height:2.0;margin-top:10px;'>" + f.a + "</p></div>" + BT + "; });
         body += fH + '</div>';
     } catch(e) { console.log("⚠️ FAQ Parse Failed: " + e.message); }
 
