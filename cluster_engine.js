@@ -95,6 +95,13 @@ async function run() {
 
     // 6. Post to Blogger
     console.log("📡 Connecting to Blogger API...");
+    
+    // Debug: Check if secrets are present (without logging values)
+    console.log("🔒 Checking Credentials Presence:");
+    console.log("- Client ID: " + (process.env.GOOGLE_CLIENT_ID ? "PRESENT" : "MISSING"));
+    console.log("- Client Secret: " + (process.env.GOOGLE_CLIENT_SECRET ? "PRESENT" : "MISSING"));
+    console.log("- Refresh Token: " + (process.env.GOOGLE_REFRESH_TOKEN ? "PRESENT" : "MISSING"));
+
     const oauth2Client = new google.auth.OAuth2(
         process.env.GOOGLE_CLIENT_ID,
         process.env.GOOGLE_CLIENT_SECRET,
