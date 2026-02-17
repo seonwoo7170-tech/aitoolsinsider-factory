@@ -1,25 +1,18 @@
 name: VUE Action Cluster Post
 on:
-  schedule:
-    - cron: "00 09 * * *"
+  schedule: [{cron: "${min} ${hour} * * *"}]
   workflow_dispatch:
-
 jobs:
   post:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - name: Install Dependencies
-        run: npm install googleapis @google/generative-ai axios form-data
-      - name: Run Cluster Engine
-        env:
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm install googleapis @google/generative-ai axios form-data
+      - env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           IMGBB_API_KEY: ${{ secrets.IMGBB_API_KEY }}
-          SERPER_API_KEY: ${{ secrets.SERPER_API_KEY }}
           KIE_API_KEY: ${{ secrets.KIE_API_KEY }}
           GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
