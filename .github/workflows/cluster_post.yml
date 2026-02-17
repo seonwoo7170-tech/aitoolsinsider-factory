@@ -2,7 +2,7 @@
 name: VUE Action Cluster Post
 on:
   schedule:
-    - cron: "${min} ${hour} * * *"
+    - cron: "00 09 * * *"
   workflow_dispatch:
 
 jobs:
