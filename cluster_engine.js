@@ -98,39 +98,54 @@ async function run() {
         (imgUrl ? `<div class="vue-main-thumb"><img src="${imgUrl}"><div style="position:absolute;inset:0;background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;padding:25px;"><div style="font-size:3.2rem;font-weight:1100;color:#fff;text-shadow:0 15px 70px rgba(0,0,0,1);text-align:center;line-height:1.2;">${title}</div></div></div>` : '') + 
         `<div style="background:#f8fafc;border-radius:45px;padding:3.8rem;margin:5.5rem 0;border:3px dashed #6366f1;"><span style="font-weight:1100;color:#4338ca;font-size:1.6rem;margin-bottom:2.2rem;display:block;">VUE EXECUTIVE SUMMARY</span><div style="color:#334155;line-height:2.4;">${cleanSum}</div></div><div class="vue-ad-slot"></div>`;
 
-    const chapters = [
-        { theme: "The Shocking Reality & The Deep Problem", tone: "Compelling, investigative" },
-        { theme: "Deep Dive: Technical Nuances & Hidden Truths", tone: "Analytical, expert-level" },
-        { theme: "The Survival Strategy: Real-world Implementation", tone: "Practical, action-oriented" },
-        { theme: "The Final Verdict: Future-proofing your Life/Business", tone: "Decisive, visionary" }
+    const isEn = lang === 'en';
+    const totalChapters = isEn ? 7 : 4; 
+    const chapterLength = isEn ? 4000 : 3500;
+    
+    const enClusters = [
+        { theme: "The Disruptive Reality: Why the Old Way is Dying", tone: "Investigative & Provocative" },
+        { theme: "The Architecture of Excellence: Deep Technical Truths", tone: "Expert-level & Analytical" },
+        { theme: "Strategic implementation: The Step-by-Step Blueprint", tone: "Actionable & Practical" },
+        { theme: "Hidden Pitfalls: What 99% of People Get Wrong", tone: "Critical & Warning" },
+        { theme: "Elite Optimization: Maximizing ROI & Efficiency", tone: "Results-oriented" },
+        { theme: "Case Studies: Real-world Heroic Transformations", tone: "Inspirational & Proof-based" },
+        { theme: "The Visionary Verdict: Dominating the 2026 Landscape", tone: "Decisive & Forward-looking" }
     ];
 
+    const koClusters = [
+        { theme: "충격적인 현실과 우리가 모르던 숨겨진 문제", tone: "탐사 보도형" },
+        { theme: "심층 분석: 기술적 미묘함과 전문가적 진실", tone: "분석형" },
+        { theme: "생존 전략: 실전 구현을 위한 단계별 가이드", tone: "실용형" },
+        { theme: "최종 평결: 미래를 대비하는 1%의 비전", tone: "결론형" }
+    ];
+
+    const targetChapters = isEn ? enClusters : koClusters;
     let fullContext = "";
-    for(let p=0; p<4; p++) {
-        console.log(`📘 Step 4.${p+1}: Crafting ${chapters[p].theme}...`);
-        const segmentPrompt = `
-            [🚨 SEQUENTIAL WRITING MODE: NO REPETITION ALLOWED]
-            You are an elite columnist continuing a 15,000-character masterpiece.
-            
-            THIS IS PART ${p+1} OF 4.
-            TITLE: "${title}"
-            CURRENT FOCUS: ${chapters[p].theme}
-            
-            [PREVIOUS CONTENT WRITTEN SO FAR]:
-            ${fullContext}
-            
-            [CRITICAL DIRECTIVE]:
-            1. READ the 'PREVIOUS CONTENT' above carefully. 
-            2. DO NOT repeat any facts, metaphors, or introductory concepts already mentioned.
-            3. START IMMEDIATELY with the next logical argument or data point. 
-            4. Transition as if you are writing the same long document. NO "In the previous section" or "Now we will".
-            5. MINIMUM 3500 characters for this specific part.
-            6. Include 1 COMPARISON TABLE (<table>) that hasn't appeared yet.
-        `;
-        
+
+    for(let p=0; p < targetChapters.length; p++) {
+        console.log(`📘 Step 4.${p+1}: Crafting ${targetChapters[p].theme}...`);
+        let subImgHtml = "";
+        const imgMarkers = isEn ? [2, 4, 6] : [1, 2, 3];
+        if(imgMarkers.includes(p)) {
+            console.log(`🎨 Generating contextual image for Part ${p+1}...`);
+            const subImgUrl = await genImg(`${title} - ${targetChapters[p].theme}`, process.env.KIE_API_KEY);
+            if(subImgUrl) subImgHtml = BT + `<div class="vue-main-thumb" style="height:380px;margin-top:6rem;"><img src="${subImgUrl}"></div>` + BT + ";
+        }
+        const segmentPrompt = `[🚨 MASTER PLATINUM SEQUENTIAL WRITING: ${isEn ? '5,000 WORDS TARGET' : '15,000 CHARS TARGET'}]\n` +
+            `This is Part ${p+1} of ${targetChapters.length}. TITLE: "${title}"\n` +
+            `CHAPTER THEME: ${targetChapters[p].theme}. TONE: ${targetChapters[p].tone}\n\n` +
+            `[FULL PREVIOUS NARRATIVE - DO NOT REPEAT]:\n${fullContext.substring(fullContext.length - 2000)}\n\n` +
+            `[CORE RULES FROM PLATINUM GUIDELINE]:\n` +
+            `1. Narrative: Use 1st-person story (e.g., "I found that...", "When I first tried...").\n` +
+            `2. Style: Mix short, punchy sentences with long, flowing expert sentences.\n` +
+            `3. Human Touch: Use metaphors related to daily life.\n` +
+            `4. NO FILLER: Start immediately with the core problem/solution.\n` +
+            `5. LENGTH: Target ${chapterLength} characters for this specific chunk.\n` +
+            `6. Visual: Include 1 <table> or <blockquote class='vue-tip'>.\n` +
+            `7. Language: Write in ${lang}.\n`;
         const content = clean(await callAI(model, segmentPrompt, true));
-        body += content;
-        fullContext += `\n/* PART ${p+1} START */\n` + content; // Accumulate full memory
+        body += subImgHtml + content;
+        fullContext += `\n/* PART ${p+1} */\n` + content;
     }
 
     console.log("❓ Step 5: Generating FAQs...");
