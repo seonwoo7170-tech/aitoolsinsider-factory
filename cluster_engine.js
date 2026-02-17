@@ -32,19 +32,18 @@ async function genImg(p, k, retry = 2) {
     if (!k || k.length < 5) return "";
     try {
         const cleanP = p.replace(/[^\w\s\uAC00-\uD7A3]/g, ' ').substring(0, 200);
-        console.log(`🎨 [IMAGE] Requesting Kie.ai (3:2 Aspect): "${cleanP}"`);
-        // 💎 FIXED SIZE: Using "3:2" instead of "1024x768"
+        console.log(`🎨 [IMAGE] Size 3:2 Requesting: "${cleanP}"`);
         const r = await axios.post("https://api.kie.ai/api/v1/gpt4o-image/generate", 
             { prompt: cleanP, n: 1, size: "3:2" }, 
             { headers: { Authorization: "Bearer " + k }, timeout: 45000 }
         );
         const url = r.data.data?.[0]?.url || r.data.image_url || r.data.url || "";
         if (url) return url;
-        console.log("⚠️ [IMAGE] Resp Body:", JSON.stringify(r.data));
+        console.log("⚠️ [IMAGE] Resp:", JSON.stringify(r.data));
     } catch (e) {
         console.log(`❌ [IMAGE ERROR] Status: ${e.response?.status}. Body: ${JSON.stringify(e.response?.data || e.message)}`);
         if (retry > 0) {
-            console.log("⏳ [IMAGE] Retrying with 5s delay...");
+            console.log("⏳ [IMAGE] Retrying...");
             await new Promise(res => setTimeout(res, 5000));
             return genImg(p, k, retry - 1);
         }
@@ -63,36 +62,36 @@ function clean(raw) {
 }
 
 async function run() {
-    console.log("💎 VUE Final Vision v1.2.0 Active.");
+    console.log("💎 VUE SEO Dominator v1.2.1 Active.");
     const config = JSON.parse(fs.readFileSync('cluster_config.json', 'utf8'));
     const bId = (process.env.BLOG_ID || config.blog_id).toString().replace(/[^0-9]/g, '');
     const model = new GoogleGenerativeAI(process.env.GEMINI_API_KEY).getGenerativeModel({ model: "gemini-2.0-flash" });
     const target = (config.clusters || [])[0] || config.pillar;
     const lang = config.lang || 'ko';
     
-    // 🛡️ QUOTA SHIELD: 1 POST PER DEBUG RUN
     for (let i = 0; i < 1; i++) {
-        console.log(`🎯 [1/1] Final Post Verification: ${target}`);
-        let titleRaw = await callAI(model, `Strong Authority SEO Title for: "${target}". Plain text.`, false);
+        console.log(`🎯 [1/1] SEO & Vision Run: ${target}`);
+        // 💎 SEO TITLE UPGRADE: Viral, Natural, No "Keyword: Subtitle" pattern
+        let titleRaw = await callAI(model, `Generate a Viral, Click-Inducing SEO Title for: "${target}" in ${lang}. Use psychological triggers and power words. DO NOT use the "Keyword: Subtitle" format. Be natural and provocative. Plain text only.`, false);
         const title = titleRaw.replace(/[\"\`\n]/g, '').substring(0, 150);
 
         const imgUrl = await genImg(title, process.env.KIE_API_KEY);
-        const sumRaw = await callAI(model, `5 elite points for "${title}" in ${lang}. Use <br><br>.`, false);
+        const sumRaw = await callAI(model, `5 elite summary points for "${title}" in ${lang}. Use <br><br>.`, false);
         const cleanSum = sumRaw.replace(/[*#-]/g, '✦').split('\n').filter(l => l.trim()).join('<br><br>');
 
         let body = STYLE + `<div class="vue-content-body">
             ${imgUrl ? `<div class="vue-main-thumb"><img src="${imgUrl}"><div style="position:absolute;inset:0;background:rgba(0,0,0,0.25);display:flex;align-items:center;justify-content:center;padding:25px;"><div style="font-size:3.5rem;font-weight:1050;color:#fff;text-shadow:0 12px 60px rgba(0,0,0,0.95);text-align:center;">${title}</div></div></div>` : ''}
-            <div style="background:#f8fafc;border-radius:45px;padding:3.8rem;margin:5.5rem 0;border:3px dashed #6366f1;"><span style="font-weight:1100;color:#4338ca;font-size:1.6rem;margin-bottom:2.2rem;display:block;">AUTHORity INSIGHT</span><div style="color:#334155;line-height:2.4;">${cleanSum}</div></div>
+            <div style="background:#f8fafc;border-radius:45px;padding:3.8rem;margin:5.5rem 0;border:3px dashed #6366f1;"><span style="font-weight:1100;color:#4338ca;font-size:1.6rem;margin-bottom:2.2rem;display:block;">EXPERT INSIGHT SUMMARY</span><div style="color:#334155;line-height:2.4;">${cleanSum}</div></div>
             <div class="vue-ad-slot"></div>`;
 
         let context = "";
         for(let p=1; p<=4; p++) {
-            const content = clean(await callAI(model, `Write Deep Chapter ${p} for "${title}" in ${lang}. ${context ? "PREVIOUS: " + context.substring(0, 1000) : ""} MIN 3000 chars. Use <div class=\"vue-ad-slot\"></div> every 3 sentences. HTML.`, true));
+            const content = clean(await callAI(model, `Write Deep Insight Chapter ${p} for "${title}" in ${lang}. ${context ? "PREVIOUS CONTEXT: " + context.substring(0, 1000) : ""} MIN 3000 chars. Use <div class=\"vue-ad-slot\"></div> every 3-4 sentences. HTML.`, true));
             body += content;
             context += content.replace(/<[^>]*>/g, ' ').substring(0, 500) + " ";
         }
 
-        const faqR = await callAI(model, `10 FAQs for "${title}" in ${lang}. Return JSON array.`, false);
+        const faqR = await callAI(model, `10 FAQs for "${title}" in ${lang}. JSON array of {q, a}.`, false);
         try {
             const faqs = JSON.parse(faqR.substring(faqR.indexOf('['), faqR.lastIndexOf(']') + 1));
             let fH = `<div class="vue-ad-slot"></div><div style="background:#fff;border-radius:60px;padding:5.5rem;margin-top:12rem;border:4px solid #f8fafc;"><div style="font-size:3.2rem;font-weight:1000;color:#6366f1;margin-bottom:5.5rem;text-align:center;">EXPERT ADVISORY FAQ</div>`;
@@ -100,15 +99,15 @@ async function run() {
             body += fH + '</div>';
         } catch(e) { }
 
-        body += `<div style="margin-top:100px;padding:40px;background:#f8fafc;border-radius:35px;border:2px solid #e2e8f0;font-size:14px;color:#64748b;line-height:2;"><b>Expert Disclaimer:</b> AI generated content. Provided for educational purpose.</div>`;
-        body += `<div style="margin-top:150px;text-align:center;color:#94a3b8;font-size:14px;font-weight:800;">© VUE FINAL v1.2.0</div></div>`;
+        body += `<div style="margin-top:100px;padding:40px;background:#f8fafc;border-radius:35px;border:2px solid #e2e8f0;font-size:14px;color:#64748b;line-height:2;"><b>Deep Disclaimer:</b> AI generated content. Provided for educational purpose. Consult professionals for expert advice.</div>`;
+        body += `<div style="margin-top:150px;text-align:center;color:#94a3b8;font-size:14px;font-weight:800;">© VUE SEO v1.2.1</div></div>`;
 
         try {
             const auth = new google.auth.OAuth2(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET, 'https://developers.google.com/oauthplayground');
             auth.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
             const blogger = google.blogger({ version: 'v3', auth });
             await blogger.posts.insert({ blogId: bId, requestBody: { title, content: body } });
-            console.log(`✅ Final Vision Success: ${title}`);
+            console.log(`✅ SEO Success: ${title}`);
         } catch (e) { console.log("❌ Blogger Error:", JSON.stringify(e.response?.data || e.message, null, 2)); }
     }
 }
