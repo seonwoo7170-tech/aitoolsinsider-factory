@@ -14,18 +14,18 @@ const STYLE = `<style>
     .vue-btn-more { display: inline-block; background: linear-gradient(135deg, #6366f1 0%, #4338ca 100%); color: #fff !important; padding: 18px 48px; border-radius: 20px; font-weight: 1000; text-decoration: none !important; }
 </style>`;
 
-const PROMPT_RULE = "MANDATORY: Return ONLY article HTML. NO numbers in headings. Professional SEO style.";
+const PROMPT_RULE = "MANDATORY: Return ONLY article HTML content. NO intro. NO numbers in headings. Professional SEO style.";
 
 async function callAI(model, prompt) {
-    try { const r = await model.generateContent(`${PROMPT_RULE}\n\n${prompt}`); return r.response.text(); } catch (e) { return ""; }
+    try { const r = await model.generateContent(`${PROMPT_RULE}\n\n${prompt}`); return r.response.text(); } catch (e) { console.log('⚠️ AI Call Warning:', e.message); return ""; }
 }
 
 function clean(raw) {
     if (!raw) return "";
     let c = raw.replace(/\`\`\`html|\`\`\`/g, '').trim();
-    // 🛡️ REPLACED LITERAL REGEX WITH SAFE RegExp FOR GITHUB ACTIONS
-    const r1 = new RegExp('<(head|body|html|meta|title|!DOCTYPE)[^>]*>[\\\\s\\\\S]*?<\\\\/\\\\1>|<(body|html|meta|!DOCTYPE)[^>]*?>', 'gi');
-    const r2 = new RegExp('<(h[23])>([\\\\d+[.\\\\\\\\s]*)', 'gi');
+    // 🛡️ RE-FIXED REGEX ESCAPING FOR V1.0.6
+    const r1 = new RegExp('<(head|body|html|meta|title|!DOCTYPE)[^>]*>[\\s\\S]*?<\\/\\1>|<(body|html|meta|!DOCTYPE)[^>]*?>', 'gi');
+    const r2 = new RegExp('<(h[23])>(\\d+[.\\s]*)', 'gi');
     c = c.replace(r1, '');
     c = c.replace(r2, '<$1>');
     c = c.split('**').map((v, i) => i % 2 === 1 ? '<b>' + v + '</b>' : v).join('');
@@ -41,7 +41,7 @@ async function genImg(p, k) {
 }
 
 async function run() {
-    console.log("💎 VUE Elite Genesis v1.0.5 Running...");
+    console.log("💎 VUE Elite Genesis v1.0.6 Strong Initializing...");
     const config = JSON.parse(fs.readFileSync('cluster_config.json', 'utf8'));
     const bId = (process.env.BLOG_ID || config.blog_id).toString().replace(/[^0-9]/g, '');
     const model = new GoogleGenerativeAI(process.env.GEMINI_API_KEY).getGenerativeModel({ model: "gemini-2.0-flash" });
@@ -51,16 +51,21 @@ async function run() {
     const lang = config.lang || 'ko';
     const readBtn = lang === 'ko' ? "상세 보기 →" : "Read Insight →";
 
-    const history = [];
+    const summaryHistory = [];
     for (let i = 0; i < 5; i++) {
         const isM = (i === 4);
         const ctx = isM ? target : (clusters[i] || target);
-        const titleRaw = await callAI(model, `Unforgettable SEO Title for: "${ctx}". NO Part/Numbers.`);
+        console.log(`🎯 [${i+1}/5] Processing: ${ctx}`);
+
+        let titleRaw = await callAI(model, `Unforgettable SEO Title for: "${ctx}". NO Part/Numbers.`);
+        // 🛡️ TITLE GUARD: Fallback if AI returns empty
+        if (!titleRaw) titleRaw = ctx + " - Professional Insight";
         const title = titleRaw.replace(/[\\"]/g, '').substring(0, 150);
+
         const ims = await Promise.all([1,2].map(() => genImg(title, process.env.KIE_API_KEY)));
 
         const sumRaw = await callAI(model, `3 main points for "${title}" in ${lang}.`);
-        const cleanSum = sumRaw.split("\n").filter(l => l.trim()).map(l => l.replace(/^[-*\\d.]\\s*/, '')).join('<br>');
+        const cleanSum = (sumRaw || "Elite strategic insight summary.").split("\n").filter(l => l.trim()).map(l => l.replace(/^[-*\\d.]\\s*/, '')).join('<br>');
 
         let body = STYLE + `<div class="vue-content-body">
             ${ims[0] ? `<div class="vue-main-thumb"><img src="${ims[0]}"><div style="position:absolute;inset:0;background:rgba(0,0,0,0.18);display:flex;align-items:center;justify-content:center;padding:25px;"><div style="font-size:3.2rem;font-weight:1050;color:#fff;text-shadow:0 6px 30px rgba(0,0,0,0.85);text-align:center;">${title}</div></div></div>` : ''}
@@ -68,7 +73,7 @@ async function run() {
 
         if (isM) {
             body += clean(await callAI(model, `Write Master Article for "${target}" in ${lang}. NO numeric subheads. HTML ONLY.`));
-            history.forEach(s => {
+            summaryHistory.forEach(s => {
                 body += `<div class="vue-hub-card"><span style="font-size:1.8rem;font-weight:1000;color:#1e293b;margin-bottom:1.2rem;display:block;">${s.title}</span><p style="color:#64748b;margin-bottom:2rem;">${s.summary}</p><a href="${s.url}" class="vue-btn-more">${readBtn}</a></div>`;
             });
         } else {
@@ -86,17 +91,20 @@ async function run() {
             body += fH + `</div>`;
         } catch(e) { }
 
-        body += `<div style="margin-top:100px;text-align:center;color:#94a3b8;font-size:13px;">© VUE Elite Genesis v1.0.5</div></div>`;
+        body += `<div style="margin-top:100px;text-align:center;color:#94a3b8;font-size:13px;">© VUE Elite Genesis v1.0.6</div></div>`;
 
         try {
             const auth = new google.auth.OAuth2(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET, 'https://developers.google.com/oauthplayground');
             auth.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
             const blogger = google.blogger({ version: 'v3', auth });
+            
+            if (!title || !body) throw new Error("Missing content or title.");
+
             const r = await blogger.posts.insert({ blogId: bId, requestBody: { title, content: body } });
-            console.log(`✅ Posted: ${title}`);
-            history.push({ title, url: r.data.url, summary: cleanSum });
-        } catch (e) { console.log("❌ Blogger Error:", e.message); }
-        await new Promise(r => setTimeout(r, 12000));
+            console.log(`✅ Posted Success: ${title}`);
+            summaryHistory.push({ title, url: r.data.url, summary: cleanSum });
+        } catch (e) { console.log("❌ Blogger Critical Error:", e.response?.data || e.message); }
+        await new Promise(r => setTimeout(r, 15000));
     }
 }
 run();
