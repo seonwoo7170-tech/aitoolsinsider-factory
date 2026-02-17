@@ -60,7 +60,7 @@ async function run() {
     - Include detailed analysis based on the search data and the SEO title context.
     - IMPORTANT: Respond ONLY with HTML fragments (h2, p, ul, etc.). DO NOT include <html>, <head>, or <body> tags.`;
     const res1 = await model.generateContent(prompt1);
-    const stage1Html = res1.response.text().replace(/\`\`\`html|\`\`\`/g, '').trim();
+    const stage1Html = res1.response.text().replace(/```html|```/g, '').trim();
     console.log("✅ Stage 1 Completed. Waiting 10s for Cooldown...");
     await wait(10000);
 
@@ -74,7 +74,7 @@ async function run() {
     - Ensure a seamless transition from Part 1.
     - IMPORTANT: Respond ONLY with HTML fragments. NO <html>/<body> tags.`;
     const res2 = await model.generateContent(prompt2);
-    const stage2Html = res2.response.text().replace(/\`\`\`html|\`\`\`/g, '').trim();
+    const stage2Html = res2.response.text().replace(/```html|```/g, '').trim();
     console.log("✅ Stage 2 Completed. Waiting 10s for Cooldown...");
     await wait(10000);
 
@@ -88,10 +88,10 @@ async function run() {
     - Conclusion should be a strong call-to-action.
     - IMPORTANT: Respond ONLY with HTML fragments. NO <html>/<body> tags.`;
     const res3 = await model.generateContent(prompt3);
-    const stage3Html = res3.response.text().replace(/\`\`\`html|\`\`\`/g, '').trim();
+    const stage3Html = res3.response.text().replace(/```html|```/g, '').trim();
     console.log("✅ Stage 3 Completed (Full English Content Ready!)");
 
-    const htmlContent = \`<div class="vue-content-body">\` + stage1Html + "\n\n" + stage2Html + "\n\n" + stage3Html + \`</div>\`;
+    const htmlContent = `<div class="vue-content-body">` + stage1Html + "\n\n" + stage2Html + "\n\n" + stage3Html + `</div>`;
 
     // 5. Handle Image
     let imageUrl = "";
