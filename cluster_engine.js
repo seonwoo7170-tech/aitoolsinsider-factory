@@ -48,7 +48,7 @@ function clean(raw) {
 }
 
 async function run() {
-    console.log("💎 VUE Final Platinum Engine Active.");
+    console.log("💎 VUE Zero Error Engine Active.");
     const config = JSON.parse(fs.readFileSync('cluster_config.json', 'utf8'));
     const bId = config.blog_id.toString().replace(/[^0-9]/g, '');
     const model = new GoogleGenerativeAI(process.env.GEMINI_API_KEY).getGenerativeModel({ model: "gemini-2.0-flash" });
@@ -83,7 +83,12 @@ async function run() {
         fullContext += content;
     }
 
-    await google.blogger({ version: 'v3', auth: new google.auth.OAuth2(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET).setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN }).currentAuth }).posts.insert({ blogId: bId, requestBody: { title, content: body } });
+    body += "</div>";
+    console.log("🚀 Step 6: Posting to Blogger...");
+    const auth = new google.auth.OAuth2(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET);
+    auth.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
+    const blogger = google.blogger({ version: 'v3', auth });
+    await blogger.posts.insert({ blogId: bId, requestBody: { title, content: body } });
     console.log("✅ SUCCESS");
 }
 run();
