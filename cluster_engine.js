@@ -19,31 +19,50 @@ const STYLE = `<style>
     .vue-faq-item { margin-bottom: 2.5rem; }
     .vue-faq-q { font-weight: 950; color: #4338ca; font-size: 1.3rem; margin-bottom: 0.8rem; display: block; border-left: 5px solid #4338ca; padding-left: 15px; }
     .vue-faq-a { color: #334155; font-size: 1.1rem; line-height: 1.8; padding-left: 20px; }
-    .vue-disclaimer-section { background: #f8fafc; border-radius: 1.5rem; padding: 2rem; margin-top: 5rem; border-top: 5px solid #cbd5e1; }
-    .vue-disclaimer-text { color: #64748b; font-size: 0.9rem; line-height: 1.7; text-align: center; }
 </style>`;
 
 const sleep = (ms) => new Promise(res => setTimeout(res, ms));
 
+async function callGemini(model, prompt, retries = 3) {
+    for (let i = 0; i < retries; i++) {
+        try {
+            const res = await model.generateContent(prompt);
+            await sleep(3500); 
+            return res.response.text();
+        } catch (e) {
+            if (e.message.includes('429') && i < retries - 1) {
+                console.log(`⚠️ Rate limit. Retry in ${(i + 1) * 12}s...`);
+                await sleep((i + 1) * 12000);
+                continue;
+            }
+            throw e;
+        }
+    }
+}
+
 function cleanHtml(raw) {
     if (!raw) return "";
     let clean = raw.replace(new RegExp('\\\`\\\`\\\`html|\\\`\\\`\\\`', 'g'), '').trim();
+    
+    // Markdown Cleaning
     clean = clean.replace(/\\*\\*(.*?)\\*\\*/g, '<b>$1</b>');
     clean = clean.replace(/\\*(.*?)\\*/g, '<i>$1</i>');
+
     const tags = ['html','head','body','title','!DOCTYPE'];
-    tags.forEach(t => { clean = clean.replace(new RegExp('<' + t + '[^>]*>', 'gi'), '').replace(new RegExp('</' + t + '>', 'gi'), ''); });
+    tags.forEach(t => {
+        clean = clean.replace(new RegExp('<' + t + '[^>]*>', 'gi'), '').replace(new RegExp('</' + t + '>', 'gi'), '');
+    });
     return clean.trim();
 }
 
 async function uploadToImgBB(url, apiKey) {
-    if(!apiKey || !url) return url;
-    if(!url.startsWith('http')) return "";
+    if(!apiKey || !url || !url.startsWith('http')) return url;
     try {
         const form = new FormData();
         form.append('image', url);
         const res = await axios.post(`https://api.imgbb.com/1/upload?key=${apiKey}`, form, { headers: form.getHeaders() });
         return res.data.data.url;
-    } catch (e) { console.warn("ImgBB Fail:", e.message); return url; }
+    } catch (e) { return url; }
 }
 
 async function generateImage(prompt, kieKey, imgbbKey) {
@@ -52,22 +71,19 @@ async function generateImage(prompt, kieKey, imgbbKey) {
 
     if (kieKey) {
         try {
-            console.log("🎨 Kie.ai Generation...");
             const res = await axios.post("https://api.kie.ai/v1/image/generate", {
-                prompt: cleanP + ", cinematic, cinematic lighting, 8k, highly detailed, professional photography",
+                prompt: cleanP + ", cinematic lighting, 8k, professional, detailed",
                 model: "z-image", width: 1024, height: 768
             }, { headers: { "Authorization": "Bearer " + kieKey }, timeout: 60000 });
             if (res.data && res.data.image_url) rawUrl = res.data.image_url;
-        } catch (e) { console.warn("Kie Error:", e.message); }
+        } catch (e) { }
     }
-    
-    // No fallback to pollinations. Only ImgBB hosting if rawUrl exists.
     if (rawUrl) return await uploadToImgBB(rawUrl, imgbbKey);
     return "";
 }
 
 async function run() {
-    console.log("🚀 VUE V16.5.2 Pure-Kie Engine Active...");
+    console.log("🚀 VUE V16.5.3 Full-Assemble Engine Active...");
     const config = JSON.parse(fs.readFileSync('cluster_config.json', 'utf8'));
     const lang = config.lang || 'ko';
     const kieKey = process.env.KIE_API_KEY;
@@ -76,23 +92,23 @@ async function run() {
     
     const dayIndex = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
     const targetTopic = config.clusters[dayIndex % config.clusters.length];
-    const personas = lang === 'ko' ? ["실무 전문가", "따뜻한 멘토", "분석가"] : ["Expert", "Mentor", "Analyst"];
+    const personas = lang === 'ko' ? ["실무 전문가", "마케팅 고수", "분석가"] : ["Expert", "Mentor", "Analyst"];
     const activePersona = personas[dayIndex % personas.length];
     
-    const badgeText = lang === 'ko' ? "마스터 클래스" : "MASTER CLASS";
-    const faqTitle = lang === 'ko' ? "자주 묻는 질문 (FAQ)" : "Frequently Asked Questions";
-    const disclaimerT = lang === 'ko' ? "본 콘텐츠는 일반 정보 제공용이며 법적 책임을 지지 않습니다." : "General information only. No liability assumed.";
+    const bText = lang === 'ko' ? "마스터 클래스" : "MASTER CLASS";
+    const fTitle = lang === 'ko' ? "자주 묻는 질문 (FAQ)" : "Frequently Asked Questions";
+    const dText = lang === 'ko' ? "본 콘텐츠는 일반 정보 제공용이며 법적 책임을 지지 않습니다." : "General information only. No liability assumed.";
 
     let publishTime = new Date(Date.now() + 15 * 60 * 1000);
 
     for (let i = 0; i < 5; i++) {
         const isMain = (i === 4);
-        console.log(`📂 Article [${i+1}/5] (Premium Kie Mode)`);
+        console.log(`📂 Article [${i+1}/5] Processing...`);
 
-        const titleRaw = await callGemini(model, `SEO Title for "${targetTopic}" in ${lang}. NO quotes. NO intro.`);
+        const titleRaw = await callGemini(model, `Write a SEO Long-tail Title for "${targetTopic}" in ${lang}. NO quotes. NO intro.`);
         const title = titleRaw.trim().replace(/[\\"]/g, '');
 
-        const imgPRaw = await callGemini(model, `Return ONLY 4 cinematic image prompts for "${title}". English. One per line. NO text.`);
+        const imgPRaw = await callGemini(model, `Return ONLY 4 cinematic image prompts for "${title}". English. One per line. NO numbers.`);
         const imgPs = imgPRaw.split("\n").filter(p => p.trim().length > 5).slice(0, 4);
         const imageUrls = await Promise.all(imgPs.map(p => generateImage(p.trim(), kieKey, imgbbKey)));
 
@@ -100,40 +116,40 @@ async function run() {
             ${imageUrls[0] ? `<div class="vue-main-thumbnail">
                 <img src="${imageUrls[0]}" alt="${title}">
                 <div class="vue-thumb-overlay">
-                    <div class="vue-thumb-badge">${badgeText}</div>
+                    <div class="vue-thumb-badge">${bText}</div>
                     <div class="vue-thumb-title">${title}</div>
                 </div>
             </div>` : ''}`;
 
         if (isMain) {
-            const mB = await callGemini(model, `Write Master Article for "${title}" in ${lang}. Style: ${activePersona}. HTML only.`);
+            const mB = await callGemini(model, `Write Master Article for "${title}" in ${lang}. Style: ${activePersona}. HTML chunks only. NO markdown bold.`);
             finalBody += cleanHtml(mB);
         } else {
             for(let p=1; p<=3; p++) {
                 const cR = await callGemini(model, `Part ${p} for "${title}" in ${lang}. NO intro. HTML only.`);
                 finalBody += cleanHtml(cR);
-                if(imageUrls[p]) finalBody += `<div class="vue-img-container"><img src="${imageUrls[p]}" alt="visual ${p}"></div>`;
+                if(imageUrls[p]) finalBody += `<div class="vue-img-container"><img src="${imageUrls[p]}" alt="section ${p}"></div>`;
             }
         }
 
         const faqR = await callGemini(model, `15-20 FAQs for "${title}" in ${lang}. Output JSON: [{"q":"...","a":"..."}].`);
         try {
             const faqs = JSON.parse(faqR.replace(new RegExp('\\\`\\\`\\\`json|\\\`\\\`\\\`', 'g'), '').trim());
-            let fH = `<div class="vue-faq-section"><div class="vue-faq-header">${faqTitle}</div>`;
+            let fH = `<div class="vue-faq-section"><div class="vue-faq-header">${fTitle}</div>`;
             faqs.forEach(f => { fH += `<div class="vue-faq-item"><span class="vue-faq-q">${f.q}</span><p class="vue-faq-a">${f.a}</p></div>`; });
             fH += `</div>`;
             const sD = { "@context": "https://schema.org", "@type": "FAQPage", "mainEntity": faqs.map(f => ({ "@type": "Question", "name": f.q, "acceptedAnswer": { "@type": "Answer", "text": f.a } })) };
             finalBody += fH + `<script type="application/ld+json">${JSON.stringify(sD)}<\/script>`;
         } catch(e) { }
 
-        finalBody += `<div class="vue-disclaimer-section"><p class="vue-disclaimer-text">${disclaimerT}</p></div></div>`;
+        finalBody += `<div style="margin-top:50px; text-align:center; color:#64748b; font-size:14px; padding:20px; background:#f8fafc; border-radius:15px;">${dText}</div></div>`;
 
         try {
             const auth = new google.auth.OAuth2(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET, 'https://developers.google.com/oauthplayground');
             auth.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
             const blogger = google.blogger({ version: 'v3', auth });
             await blogger.posts.insert({ blogId: config.blog_id, requestBody: { title, content: finalBody, published: publishTime.toISOString() } });
-            console.log(`✅ PREMIUM POSTED: ${title}`);
+            console.log(`✅ SUCCESS: ${title}`);
         } catch (e) { }
         
         await sleep(15000); 
