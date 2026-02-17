@@ -13,15 +13,13 @@ async function run() {
     const targetTopic = config.clusters[topicIdx];
     console.log("📝 Target Topic: " + targetTopic);
 
-    // 2. Search for real-time data via Serper
+    // 2. Search for real-time data via Serper (Global Scope)
     let searchContext = "";
     if (process.env.SERPER_API_KEY) {
         console.log("🔍 Searching real-time data for: " + targetTopic);
         try {
             const searchRes = await axios.post('https://google.serper.dev/search', {
-                q: targetTopic,
-                gl: 'kr',
-                hl: 'ko'
+                q: targetTopic
             }, {
                 headers: { 'X-API-KEY': process.env.SERPER_API_KEY, 'Content-Type': 'application/json' }
             });
@@ -37,25 +35,49 @@ async function run() {
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
-    // 4. Generate Content (15,000 chars instruction)
-    const prompt = `주제: "${targetTopic}"\n
-    상세 검색 데이터:\n${searchContext}\n\n
-    당신은 Studio VUE의 오리진 마스터입니다. 위 검색 데이터를 바탕으로 15,000자 이상의 초고품질 HTML 포스팅을 작성하세요.
-    - 한국어 12,000자~13,500자 준수 (섹션당 1,500자 이상)
-    - 반드시 h2 태그를 사용하고 전문적인 분석과 1인칭 서사를 포함하세요.
-    - 검색 데이터에 있는 최신 수치와 정보를 글에 자연스럽게 녹여내세요.
-    - FAQ 25개를 포함하세요.
-    - 오직 HTML 태그로만 응답하세요.`;
+    // 4. Multi-Stage Generation for 15,000+ chars (English)
+    console.log("🧠 Starting Multi-Stage English Generation...");
     
-    console.log("🧠 Generating high-quality content via Gemini...");
-    const result = await model.generateContent(prompt);
-    const htmlContent = result.response.text().replace(/```html|```/g, '').trim();
+    // Stage 1: Intro & Analysis
+    const prompt1 = `Topic: "${targetTopic}"\nSearch Data:\n${searchContext}\n\n
+    You are the "Origin Master" of Studio VUE. Write the [Part 1: In-depth Introduction & Market Analysis] of a 4,000-word blog post.
+    - language: English (Professional, Native-level)
+    - Minimum 1,500 words for this part.
+    - Include detailed analysis based on the search data.
+    - Respond strictly in HTML format.`;
+    const res1 = await model.generateContent(prompt1);
+    const stage1Html = res1.response.text().replace(/```html|```/g, '').trim();
+    console.log("✅ Stage 1 Completed");
 
-    // 4. Handle Image (Simplified: Thumbnail generation via Pollinations fallback logic if ImgBB provided)
+    // Stage 2: Strategy & Case Studies
+    const prompt2 = `Continue from the previous content and write [Part 2: Detailed Strategies, Comparison, and Real-world Cases].\n
+    Context Summary of Part 1: ${stage1Html.substring(0, 500)}...\n
+    - language: English
+    - Minimum 1,500 words for this part.
+    - Ensure a seamless transition from Part 1.
+    - Respond strictly in HTML format.`;
+    const res2 = await model.generateContent(prompt2);
+    const stage2Html = res2.response.text().replace(/```html|```/g, '').trim();
+    console.log("✅ Stage 2 Completed");
+
+    // Stage 3: FAQ 25 & Executive Conclusion
+    const prompt3 = `Finally, write [Part 3: Comprehensive FAQ (25 items) & Executive Conclusion].\n
+    - language: English
+    - Minimum 1,000 words for this part.
+    - The FAQ must be professional and insightful.
+    - Conclusion should be a strong call-to-action.
+    - Respond strictly in HTML format.`;
+    const res3 = await model.generateContent(prompt3);
+    const stage3Html = res3.response.text().replace(/```html|```/g, '').trim();
+    console.log("✅ Stage 3 Completed (Full English Content Ready!)");
+
+    const htmlContent = stage1Html + stage2Html + stage3Html;
+
+    // 5. Handle Image (Improved Prompt for English)
     let imageUrl = "";
     if (process.env.IMGBB_API_KEY) {
         console.log("🎨 Generating thumbnail...");
-        const imgPrompt = `Professional cinematic photography of ${targetTopic}, 8k, premium style`;
+        const imgPrompt = `Professional cinematic photography of ${targetTopic}, futuristic AI style, 8k, highly detailed, premium aesthetic`;
         try {
             const pollinationUrl = "https://image.pollinations.ai/prompt/" + encodeURIComponent(imgPrompt) + "?width=1280&height=720&nologo=true";
             const imgRes = await axios.get(pollinationUrl, { responseType: 'arraybuffer' });
@@ -69,9 +91,9 @@ async function run() {
         } catch(e) { console.error("Image gen failed cover", e); }
     }
 
-    const finalHtml = (imageUrl ? `<div style="text-align:center;margin-bottom:30px;"><img src="${imageUrl}" style="width:100%;border-radius:20px;box-shadow:0 10px 30px rgba(0,0,0,0.1)"></div>` : "") + htmlContent;
+    const finalHtml = (imageUrl ? `<div style="text-align:center;margin-bottom:30px;"><img src="${imageUrl}" alt="${targetTopic}" style="width:100%;border-radius:20px;box-shadow:0 10px 30px rgba(0,0,0,0.1)"></div>` : "") + htmlContent;
 
-    // 5. Post to Blogger
+    // 6. Post to Blogger
     console.log("📡 Connecting to Blogger API...");
     const oauth2Client = new google.auth.OAuth2(
         process.env.GOOGLE_CLIENT_ID,
@@ -89,7 +111,7 @@ async function run() {
         }
     });
 
-    console.log("✅ Post completed successfully!");
+    console.log("✅ Post completed successfully in English!");
 }
 
 run().catch(err => {
