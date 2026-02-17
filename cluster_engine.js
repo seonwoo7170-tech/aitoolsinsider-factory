@@ -38,13 +38,13 @@ async function run() {
         const seoTitle = tRes.response.text().trim();
 
         const base = `You are a premium tech journalist. Use <h2>, <h3>, <table>, <div class="vue-tip">. Respond ONLY in HTML fragments.`;
-        const h1Res = await model.generateContent(`${base}\n\nCONTEXT:\n${searchContext}\n\nPart 1: Intro/Analysis for "${seoTitle}". Min 1500 words.`);
+        const h1Res = await model.generateContent(`${base}\n\nPart 1: Intro/Analysis for "${seoTitle}". Min 1500 words.\n\nCONTEXT:\n${searchContext}`);
         const h1 = h1Res.response.text().replace(/```html|```/g, '').trim();
 
-        const h2Res = await model.generateContent(`${base}\n\nCONTEXT:\n${searchContext}\n\nPart 2: Strategies/Cases for "${seoTitle}". Min 1500 words.`);
+        const h2Res = await model.generateContent(`${base}\n\nPart 2: Strategies/Cases for "${seoTitle}". Min 1500 words.\n\nCONTEXT:\n${searchContext}`);
         const h2 = h2Res.response.text().replace(/```html|```/g, '').trim();
 
-        const h3Res = await model.generateContent(`${base}\n\nCONTEXT:\n${searchContext}\n\nPart 3: 25 FAQs/Conclusion for "${seoTitle}". Min 1000 words.`);
+        const h3Res = await model.generateContent(`${base}\n\nPart 3: FAQ/Conclusion for "${seoTitle}". Min 1000 words.\n\nCONTEXT:\n${searchContext}`);
         const h3 = h3Res.response.text().replace(/```html|```/g, '').trim();
 
         let imageUrl = "";
