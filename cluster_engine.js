@@ -26,32 +26,29 @@ const STYLE = `<style>
   .summary-box { background-color:#d4edda; border:1px solid #28a745; border-radius:8px; padding:18px; margin:3em 0; color:#155724; font-size:14px; }
   figure { margin: 3em 0; text-align: center; }
   figcaption { font-size: 0.9em; color: #666; margin-top: 10px; }
-  table { width: 100%; border-collapse: separate; border-spacing: 0; margin: 40px 0; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; }
-  th { background: #1e293b; color: #fff; padding: 18px; }td { padding: 18px; border-bottom: 1px solid #edf2f7; text-align: center; }
-  .vue-ad { height: 40px; margin: 3rem 0; border: 1px dashed #cbd5e1; border-radius: 10px; display: flex; align-items: center; justify-content: center; }
-  .vue-ad::after { content: 'ADVERTISEMENT'; color: #94a3b8; font-size: 9px; font-weight: 800; letter-spacing: 3px; }
 </style>`;
 
 async function callAI(model, prompt, isHTML = false, retry = 3) {
-  const rules = isHTML ? "[RULES]\n1. USE <p> tags for all text.\n2. NO <h1> or <h2>.\n3. Use <h3> for sub-points.\n4. Use <b> for important phrases.\n5. START DIRECTLY.\n\n" : "PROVIDE ONE SEO TITLE. NO MARKDOWN.\n\n";
+  const rules = isHTML ? "[RULES]\n1. USE <p> tags for all text.\n2. NO <h1> or <h2>.\n3. Use <h3> for sub-points.\n4. Use <b> for important phrases.\n5. START DIRECTLY.\n\n" : "PROVIDE RESPONSE. NO MARKDOWN. NO INTRO.\n\n";
   try { const r = await model.generateContent(rules + prompt); return r.response.text().trim(); }
   catch (e) { if (e.message.includes('429') && retry > 0) { await new Promise(res => setTimeout(res, 20000)); return callAI(model, prompt, isHTML, retry - 1); } return ""; }
 }
 
 async function genImg(p, k) {
   if(!k) return "";
-  const clp = p.replace(/[*#\"\`]/g, '').substring(0, 200).trim();
-  console.log('🎨 Generating Image for: ' + clp);
+  const clp = p.replace(/[*#\"\`]/g, '').substring(0, 400).trim();
+  console.log('🎨 Generating Image: ' + clp);
   try {
-    const cr = await axios.post("https://api.kie.ai/api/v1/jobs/createTask", { model: "z-image", input: { prompt: clp + " cinematic lighting, ultra detailed", aspect_ratio: "16:9" } }, { headers: { Authorization: "Bearer " + k.trim() } });
+    const cr = await axios.post("https://api.kie.ai/api/v1/jobs/createTask", { model: "z-image", input: { prompt: clp + " cinematic photography, 8k resolution, ultra detailed, no humans, professional lighting", aspect_ratio: "16:9" } }, { headers: { Authorization: "Bearer " + k.trim() } });
     const tid = cr.data.data.taskId;
     for(let a=0; a<25; a++) {
+      process.stdout.write('.');
       await new Promise(res => setTimeout(res, 8000));
       const pr = await axios.get("https://api.kie.ai/api/v1/jobs/recordInfo?taskId=" + tid, { headers: { Authorization: "Bearer " + k.trim() } });
-      if(pr.data.data.state === 'success') return JSON.parse(pr.data.data.resultJson).resultUrls?.[0] || "";
+      if(pr.data.data.state === 'success') { console.log('✅ Success!'); return JSON.parse(pr.data.data.resultJson).resultUrls?.[0] || ""; }
       if(pr.data.data.state === 'fail') break;
     }
-  } catch(e) { console.log('⚠️ Image Error: ' + e.message); }
+  } catch(e) { console.log('\n⚠️ Image Error: ' + e.message); }
   return "";
 }
 
@@ -73,12 +70,13 @@ async function run() {
   const lang = config.lang || 'ko';
   const bId = config.blog_id.toString().replace(/[^0-9]/g, '');
 
-  console.log("🚀 Step 1: Viral Title");
+  console.log("🚀 Step 1: Viral Title Generation");
   let titleRaw = await callAI(model, "Create ONE high-impact SEO title for: " + target + " in " + lang, false);
   const title = titleRaw.replace(/[\"\\\`\n*#-]/g, '').trim();
 
-  console.log("🎨 Step 2: Main Thumbnail");
-  const imgUrl = await genImg(title, process.env.KIE_API_KEY);
+  console.log("🎨 Step 2: Main Thumbnail Visual Prompt");
+  const mainPrompt = await callAI(model, "Describe a cinematic hero-shot image for target topic: '" + title + "' in short English. No humans. Only visual elements.", false);
+  const imgUrl = await genImg(mainPrompt, process.env.KIE_API_KEY);
 
   console.log("📝 Step 3: Elite Summary");
   const sumRaw = await callAI(model, "Summarize '" + title + "' in 5 points. Language: " + lang, false);
@@ -110,7 +108,7 @@ async function run() {
     `<li><a href='#faq'>❓ 자주 묻는 질문 (FAQ)</a></li></ul></div>`;
 
   let bodyContent = STYLE + "<div class='vue-body'>" + 
-    (imgUrl ? "<figure><img src='" + imgUrl + "' alt='" + title + "'><figcaption>" + title + "</figcaption></figure>" : "") +
+    (imgUrl ? "<figure><img src='" + imgUrl + "' alt='" + title + "'><div style='position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:20px;'>" + ytTitleHtml + "</div><figcaption>" + title + "</figcaption></figure>" : "") +
     "<p data-ke-size='size16'>" + title + " - 더 자세히 알아볼까요?</p>" + tocHtml + 
     "<div class='summary-box'><span style='font-weight:900;'>📌 요약:</span><br>" + sumRaw + "</div><div class='vue-ad'></div>";
 
@@ -118,10 +116,11 @@ async function run() {
     console.log("📘 Writing Section " + (p+1));
     let subImgHtml = "";
     if([1, 2, 3].includes(p)) {
-      const siu = await genImg(title + " snapshot " + (p+1), process.env.KIE_API_KEY);
+      const subVisualPrompt = await callAI(model, "Describe a context-aware image for this chapter: '" + cls[p].t + "' of '" + title + "' in short English. Visual object only.", false);
+      const siu = await genImg(subVisualPrompt, process.env.KIE_API_KEY);
       if(siu) subImgHtml = "<figure><img src='" + siu + "'></figure>";
     }
-    const prompt = "Write chapter: " + cls[p].t + " for topic: " + title + " in " + lang + ". Use story-telling.";
+    const prompt = "Write chapter: " + cls[p].t + " for topic: " + title + " in " + lang + ". Use story-telling and professional tone.";
     const contentRaw = await callAI(model, prompt, true);
     const content = clean(contentRaw, true);
     bodyContent += `<h2 id='section${p+1}'>🚀 ${cls[p].t}</h2>` + subImgHtml + content + "<div class='vue-ad'></div>";
