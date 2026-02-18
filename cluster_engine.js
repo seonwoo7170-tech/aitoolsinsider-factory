@@ -100,7 +100,7 @@ async function writeAndPost(model, target, lang, blogger, bId, isPillar, prevLin
         const promptBase = isPillar 
             ? (i < 4 ? \`Narrative summary of '${chapters[i]}' for cluster synergy. MIN 1500 chars.\` : \`Deep strategy on '${chapters[i]}'. MIN 1500 chars.\`)
             : \`Expert deep-dive into '${chapters[i]}'. MIN \${lang==='ko'?'2600자':'1000 words'}.\`;
-        const finalPrompt = \`[DUPLICATION SHIELD v1.3.52]\\\\nPrevious context summary: \${writtenSummary}\\\\n\\\\nInstruction: Write the chapter '${chapters[i]}' for '${title}'. ${promptBase}\\\\n[CRITICAL: NO REPETITION. Provide NEW insights only.]\\\\n[NO MARKDOWN. HTML TAGS ONLY.]\`;
+        const finalPrompt = \`[DUPLICATION SHIELD v1.3.53]\\\\nPrevious context summary: \${writtenSummary}\\\\n\\\\nInstruction: Write the chapter '${chapters[i]}' for '${title}'. ${promptBase}\\\\n[CRITICAL: NO REPETITION. Provide NEW insights only.]\\\\n[NO MARKDOWN. HTML TAGS ONLY.]\`;
         const sectionContent = await callAI(model, finalPrompt);
         body += \`<h2 id='s\${i+1}' class='h2-premium'>🎯 ${i+1}. ${chapters[i]}</h2>\`;
         if(secImg) body += \`<div class='img-center'><img src='\${secImg}' class='img-sub'></div>\`;
@@ -120,9 +120,10 @@ async function writeAndPost(model, target, lang, blogger, bId, isPillar, prevLin
 }
 
 async function run() {
-    console.log(\"\\\\n[VUE] 구문 수호자 엔진 v1.3.52 기동 중...\");
+    console.log(\"\\\\n[VUE] 무결성 강화 엔진 v1.3.53 기동 중...\");
     const config = JSON.parse(fs.readFileSync('cluster_config.json', 'utf8'));
-    const model = new GoogleGenerativeAI(process.env.GEMINI_API_KEY).getGenerativeModel({ model: \"gemini-2.0-flash\" });
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: \"gemini-2.0-flash\" });
     const auth = new google.auth.OAuth2(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET);
     auth.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
     const blogger = google.blogger({ version: 'v3', auth });
@@ -143,6 +144,6 @@ async function run() {
     config.clusters = pool;
     const url = \`https://api.github.com/repos/\${process.env.GITHUB_REPOSITORY}/contents/cluster_config.json\`;
     const gRes = await axios.get(url, { headers: { Authorization: \`token \${process.env.GITHUB_TOKEN}\` } });
-    await axios.put(url, { message: '[VUE] Syntax Guardian v1.3.52', content: Buffer.from(JSON.stringify(config, null, 2)).toString('base64'), sha: gRes.data.sha }, { headers: { Authorization: \`token \${process.env.GITHUB_TOKEN}\` } });
+    await axios.put(url, { message: '[VUE] Integrity Shield v1.3.53', content: Buffer.from(JSON.stringify(config, null, 2)).toString('base64'), sha: gRes.data.sha }, { headers: { Authorization: \`token \${process.env.GITHUB_TOKEN}\` } });
 }
 run();
