@@ -12,6 +12,9 @@ const STYLE = `<style>
   .vue-body b { color: #1e293b; font-weight: 800; background: linear-gradient(to top, #e0e7ff 40%, transparent 40%); }
   .vue-thumb { position: relative; width: 100%; height: 500px; border-radius: 35px; overflow: hidden; margin: 40px 0; box-shadow: 0 30px 60px -12px rgba(0,0,0,0.2); }
   .vue-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .vue-title-box { display: inline-flex; flex-direction: column; align-items: center; gap: 8px; }
+  .vue-yt-line { background: #000; color: #fff; padding: 4px 18px; font-weight: 950; font-size: 2.6rem; line-height: 1.3; box-shadow: 10px 0 0 #000, -10px 0 0 #000; }
+  .vue-yt-line.highlight { background: #6366f1; box-shadow: 10px 0 0 #6366f1, -10px 0 0 #6366f1; }
   table { width: 100%; border-collapse: separate; border-spacing: 0; margin: 40px 0; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; }
   th { background: #1e293b; color: #fff; padding: 18px; }td { padding: 18px; border-bottom: 1px solid #edf2f7; text-align: center; }
   .vue-ad { height: 40px; margin: 3rem 0; border: 1px dashed #cbd5e1; border-radius: 10px; display: flex; align-items: center; justify-content: center; }
@@ -19,7 +22,7 @@ const STYLE = `<style>
 </style>`;
 
 async function callAI(model, prompt, isHTML = false, retry = 3) {
-  const rules = isHTML ? "[VUE PLATINUM RULES]\n1. NO AI labels.\n2. Use h3 for sub-points.\n3. ONE table per part.\n4. FINISH ALL TAGS.\n5. START DIRECTLY.\n\n" : "RAW TEXT ONLY.\n\n";
+  const rules = isHTML ? "[RULES]\n1. NO labels.\n2. Use h3.\n3. FINISH TAGS.\n4. START DIRECTLY.\n\n" : "PROVIDE ONE SEO TITLE. NO MARKDOWN. MAX 8 WORDS.\n\n";
   try {
     const r = await model.generateContent(rules + prompt);
     return r.response.text().trim();
@@ -33,7 +36,7 @@ async function genImg(p, k) {
   if(!k) return "";
   const clp = p.replace(/[*#\"\`]/g, '').substring(0, 200).trim();
   try {
-    const cr = await axios.post("https://api.kie.ai/api/v1/jobs/createTask", { model: "z-image", input: { prompt: clp, aspect_ratio: "16:9" } }, { headers: { Authorization: "Bearer " + k.trim() } });
+    const cr = await axios.post("https://api.kie.ai/api/v1/jobs/createTask", { model: "z-image", input: { prompt: clp + " cinematic lighting, ultra detailed", aspect_ratio: "16:9" } }, { headers: { Authorization: "Bearer " + k.trim() } });
     if(cr.data.code !== 200) return "";
     const tid = cr.data.data.taskId;
     for(let a=0; a<20; a++) {
@@ -49,30 +52,41 @@ async function genImg(p, k) {
 function clean(raw) {
   if(!raw) return "";
   let c = raw.replace(/```html|```/g, "").trim();
-  ['head','body','html','meta','title','!DOCTYPE','style','h1'].forEach(t => {
+  ['head','body','html','meta','title','!DOCTYPE','style','h1','h2'].forEach(t => {
     c = c.replace(new RegExp('<'+t+'[^>]*>', 'gi'), '').replace(new RegExp('</'+t+'>', 'gi'), '');
   });
+  c = c.replace(/CHAPTER \d+[:]*/gi, '').replace(/PART \d+[:]*/gi, '').replace(/###/g, '');
   return c.split('**').map((v, i) => i%2===1 ? '<b>'+v+'</b>' : v).join('').trim();
 }
 
 async function run() {
-  console.log("💎 VUE Typography Engine v1.3.6.");
+  console.log("💎 VUE YouTube Impact Engine v1.3.10 Active.");
   const config = JSON.parse(fs.readFileSync('cluster_config.json', 'utf8'));
-  const bId = config.blog_id.toString().replace(/[^0-9]/g, '');
   const model = new GoogleGenerativeAI(process.env.GEMINI_API_KEY).getGenerativeModel({ model: "gemini-2.0-flash" });
   const target = (config.clusters || [])[0] || config.pillar;
   const lang = config.lang || 'ko';
 
-  let titleRaw = await callAI(model, "Write ONE viral SEO title for: " + target + " in " + lang, false);
-  const title = titleRaw.replace(/[\"\\\`\n*#-]/g, '').split(/[.?!]/)[0].substring(0, 100).trim();
-  console.log("📌 Title: " + title);
+  let titleRaw = await callAI(model, "Create ONE high-impact SEO title for: " + target + " in " + lang + ". (MAX 8 words, NO punctuation)", false);
+  const title = titleRaw.replace(/[\"\\\`\n*#-]/g, '').trim();
+  console.log("📌 Final Title: " + title);
 
   const imgUrl = await genImg(title, process.env.KIE_API_KEY);
   const sumRaw = await callAI(model, "5 summary points for: " + title + " in " + lang + ". Use <br><br>.", false);
 
+  const words = title.split(' ');
+  let ytTitleHtml = "<div class='vue-title-box'>";
+  if(words.length > 4) {
+    const mid = Math.ceil(words.length / 2);
+    ytTitleHtml += `<span class='vue-yt-line'>${words.slice(0, mid).join(' ')}</span>`;
+    ytTitleHtml += `<span class='vue-yt-line highlight'>${words.slice(mid).join(' ')}</span>`;
+  } else {
+    ytTitleHtml += `<span class='vue-yt-line highlight'>${title}</span>`;
+  }
+  ytTitleHtml += "</div>";
+
   let body = STYLE + "<div class='vue-body'>" + 
-    (imgUrl ? "<div class='vue-thumb'><img src='" + imgUrl + "'><div style='position:absolute;inset:0;background:rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;padding:25px;'><div style='font-size:3rem;font-weight:900;color:#fff;text-shadow:0 10px 30px rgba(0,0,0,0.9);text-align:center;'>" + title + "</div></div></div>" : "") +
-    "<div style='background:#f8fafc;border-radius:35px;padding:3rem;margin:4rem 0;border:2px dashed #6366f1;'><span style='font-weight:900;color:#4338ca;display:block;margin-bottom:1rem;'>SUMMARY</span>" + sumRaw + "</div><div class='vue-ad'></div>";
+    (imgUrl ? "<div class='vue-thumb'><img src='" + imgUrl + "'><div style='position:absolute;inset:0;background:rgba(0,0,0,0.25);display:flex;align-items:center;justify-content:center;padding:20px;'>" + ytTitleHtml + "</div></div>" : "") +
+    "<div style='background:#f8fafc;border-radius:35px;padding:3rem;margin:4rem 0;border:2px dashed #6366f1;'><span style='font-weight:900;color:#4338ca;display:block;margin-bottom:1rem;'>CORE SUMMARY</span>" + sumRaw + "</div><div class='vue-ad'></div>";
 
   const cls = lang === 'en' ? [
     { t: "The Paradigm Shift: Decoding the Future", tone: "Shocking" },
@@ -89,17 +103,13 @@ async function run() {
 
   let fullContext = "";
   for(let p=0; p < cls.length; p++) {
-    console.log("📘 Part " + (p+1) + ": " + cls[p].t);
+    console.log("📘 Section " + (p+1));
     let subImgHtml = "";
     if([1, 2, 3].includes(p)) {
-      const siu = await genImg(title + " " + cls[p].t, process.env.KIE_API_KEY);
-      if(siu) subImgHtml = "<div class='vue-thumb' style='height:420px;margin-top:6rem;'><img src='" + siu + "'></div>";
+      const siu = await genImg(title + " context " + (p+1), process.env.KIE_API_KEY);
+      if(siu) subImgHtml = "<div class='vue-thumb' style='height:420px;margin:5rem 0;'><img src='" + siu + "'></div>";
     }
-    const prompt = "[PLATINUM MODE] Write CHAPTER " + (p+1) + " of " + cls.length + ".\n" +
-      "CHAPTER TITLE: " + cls[p].t + "\n" + 
-      "[CRITICAL]: Use h3 for important sub-sections within this chapter.\n" +
-      "PREVIOUS CONTENT: " + fullContext.substring(fullContext.length - 2000) + "\n\n" +
-      "[TASK]: Start directly. Use 1st-person storytelling. Include 1 Comparison Table. Write at least " + (lang==='en'?"800 words":"3500 chars") + ".";
+    const prompt = "Write SECTION " + (p+1) + " of " + cls.length + ".\nTITLE: " + cls[p].t + "\n[RULES]: NO titles/headers. Use h3. Start with narrative in " + lang + ".";
     const content = clean(await callAI(model, prompt, true));
     body += "<h2>" + cls[p].t + "</h2>" + subImgHtml + content + "<div class='vue-ad'></div>";
     fullContext += content;
@@ -107,7 +117,14 @@ async function run() {
 
   const auth = new google.auth.OAuth2(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET);
   auth.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
-  await google.blogger({ version: 'v3', auth }).posts.insert({ blogId: bId, requestBody: { title, content: body + "</div>" } });
+  const blogger = google.blogger({ version: 'v3', auth });
+  const requestBody = { title, content: body + "</div>" };
+  if (config.random_delay) {
+    let pubDate = new Date();
+    pubDate.setMinutes(pubDate.getMinutes() + Math.floor(Math.random() * 720));
+    requestBody.published = pubDate.toISOString();
+  }
+  await blogger.posts.insert({ blogId: config.blog_id.toString().replace(/[^0-9]/g, ''), requestBody });
   console.log("✅ SUCCESS");
 }
 run();
