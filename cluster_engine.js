@@ -7,29 +7,36 @@ const STYLE = `<style>
   @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;800&family=Pretendard:wght@400;700;900&display=swap');
   .vue-body { font-family: 'Pretendard', sans-serif; line-height: 1.8; color: #333; font-size: 16px; max-width: 860px; margin: 0 auto; padding: 20px; word-break: keep-all; }
   .vue-body p { margin: 1.5em 0; line-height: 1.8; }
-  .vue-body h2 { font-size: 22px; font-weight: bold; color: #000; background-color: #FFD8A8; padding: 12px 15px; border-radius: 6px; margin: 3em 0 1.5em; line-height: 1.4; border-bottom: none; }
-  .vue-body h3 { font-size: 19px; font-weight: bold; color: #000; margin: 2.5em 0 1.2em; line-height: 1.4; }
+  /* H2: Chapter Title (Orange Background) */
+  .vue-body h2 { font-size: 24px; font-weight: bold; color: #000; background-color: #FFD8A8; padding: 15px 20px; border-radius: 8px; margin: 4em 0 1.8em; line-height: 1.3; border-left: 8px solid #000; }
+  /* H3: Sub-heading (Underline Style) */
+  .vue-body h3 { font-size: 20px; font-weight: bold; color: #000; margin: 2.5em 0 1.2em; line-height: 1.4; padding-bottom: 8px; border-bottom: 2px solid #eee; display: flex; align-items: center; gap: 8px; }
+  .vue-body h3::before { content: '📍'; font-size: 18px; }
   .vue-body b { color: #000; font-weight: 800; background: linear-gradient(to top, #fff3cd 50%, transparent 50%); }
   .vue-body ul, .vue-body ol { margin: 1.5em 0; padding-left: 1.5em; }
   .vue-body li { margin-bottom: 0.8em; }
-  .vue-thumb { position: relative; width: 100%; border-radius: 12px; overflow: hidden; margin: 3em 0; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+  .vue-thumb { position: relative; width: 100%; border-radius: 12px; overflow: hidden; margin: 3.5em 0; box-shadow: 0 15px 35px rgba(0,0,0,0.12); }
   .vue-thumb img { width: 100%; height: auto; display: block; }
   .vue-title-box { display: inline-flex; flex-direction: column; align-items: center; gap: 8px; }
-  .vue-yt-line { background: #000; color: #fff; padding: 5px 20px; font-weight: 900; font-size: 2.5rem; line-height: 1.2; box-shadow: 10px 0 0 #000, -10px 0 0 #000; }
+  .vue-yt-line { background: #000; color: #fff; padding: 6px 22px; font-weight: 900; font-size: 2.5rem; line-height: 1.2; box-shadow: 10px 0 0 #000, -10px 0 0 #000; }
   .vue-yt-line.highlight { background: #6366f1; box-shadow: 10px 0 0 #6366f1, -10px 0 0 #6366f1; }
   .toc-container { background-color: #F8E8EE; padding: 25px; border-radius: 12px; border: 2px solid #000; max-width: 90%; margin: 3em auto; box-shadow: 0 0 15px rgba(255, 105, 180, 0.4); animation: fast-glow 0.8s infinite alternate; }
-  .toc-title { font-size: 20px; font-weight: bold; text-align: center; color: #000; margin-bottom: 15px; }
+  .toc-title { font-size: 21px; font-weight: bold; text-align: center; color: #000; margin-bottom: 15px; }
   .toc-container ul { list-style: none; padding: 0; margin: 0; }
-  .toc-container li a { text-decoration: none !important; color: #000 !important; font-weight: bold; font-size: 15px; display: block; padding: 5px 0; }
+  .toc-container li a { text-decoration: none !important; color: #000 !important; font-weight: bold; font-size: 15px; display: block; padding: 6px 0; }
   @keyframes fast-glow { from { box-shadow: 0 0 10px rgba(255,105,180,0.4); } to { box-shadow: 0 0 20px rgba(255,105,180,0.7); } }
-  .alert-box { background-color:#fff3cd; border:1px solid #ffc107; border-radius:8px; padding:18px; margin:3em 0; color:#856404; font-size:14px; }
-  .summary-box { background-color:#d4edda; border:1px solid #28a745; border-radius:8px; padding:18px; margin:3em 0; color:#155724; font-size:14px; }
-  figure { margin: 3em 0; text-align: center; }
-  figcaption { font-size: 0.9em; color: #666; margin-top: 10px; }
+  .alert-box { background-color:#fff3cd; border:1px solid #ffc107; border-radius:8px; padding:20px; margin:4em 0; color:#856404; font-size:15px; line-height: 1.6; }
+  .summary-box { background-color:#d4edda; border:1px solid #28a745; border-radius:8px; padding:20px; margin:4em 0; color:#155724; font-size:15px; line-height: 1.6; }
+  figure { margin: 3.5em 0; text-align: center; }
+  figcaption { font-size: 0.9em; color: #777; margin-top: 12px; font-weight: 500; }
+  table { width: 100%; border-collapse: separate; border-spacing: 0; margin: 40px 0; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; }
+  th { background: #1e293b; color: #fff; padding: 18px; }td { padding: 18px; border-bottom: 1px solid #edf2f7; text-align: center; }
+  .vue-ad { height: 40px; margin: 3.5rem 0; border: 1px dashed #cbd5e1; border-radius: 10px; display: flex; align-items: center; justify-content: center; }
+  .vue-ad::after { content: 'ADVERTISEMENT'; color: #94a3b8; font-size: 9px; font-weight: 800; letter-spacing: 3px; }
 </style>`;
 
 async function callAI(model, prompt, isHTML = false, retry = 3) {
-  const rules = isHTML ? "[RULES]\n1. USE <p> tags for all text.\n2. NO <h1> or <h2>.\n3. Use <h3> for sub-points.\n4. Use <b> for important phrases.\n5. START DIRECTLY.\n\n" : "PROVIDE RESPONSE. NO MARKDOWN. NO INTRO.\n\n";
+  const rules = isHTML ? "[RULES]\n1. USE <p> tags for all text.\n2. NO <h1> or <h2>.\n3. Use <h3> for sub-headings with appropriate emoji.\n4. Use <b> for important keywords.\n5. START DIRECTLY with narrative.\n\n" : "PROVIDE RESPONSE. NO MARKDOWN. NO INTRO.\n\n";
   try { const r = await model.generateContent(rules + prompt); return r.response.text().trim(); }
   catch (e) { if (e.message.includes('429') && retry > 0) { await new Promise(res => setTimeout(res, 20000)); return callAI(model, prompt, isHTML, retry - 1); } return ""; }
 }
@@ -108,7 +115,7 @@ async function run() {
     `<li><a href='#faq'>❓ 자주 묻는 질문 (FAQ)</a></li></ul></div>`;
 
   let bodyContent = STYLE + "<div class='vue-body'>" + 
-    (imgUrl ? "<figure><img src='" + imgUrl + "' alt='" + title + "'><div style='position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:20px;'>" + ytTitleHtml + "</div><figcaption>" + title + "</figcaption></figure>" : "") +
+    (imgUrl ? "<figure style='position:relative;width:100%;border-radius:12px;overflow:hidden;margin:3.5em 0;'><img src='" + imgUrl + "' alt='" + title + "' style='width:100%;display:block;'><div style='position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,0.15);'>" + ytTitleHtml + "</div></figure><figcaption style='text-align:center;font-size:0.9em;color:#777;margin-top:-2em;margin-bottom:3em;'>" + title + "</figcaption>" : "") +
     "<p data-ke-size='size16'>" + title + " - 더 자세히 알아볼까요?</p>" + tocHtml + 
     "<div class='summary-box'><span style='font-weight:900;'>📌 요약:</span><br>" + sumRaw + "</div><div class='vue-ad'></div>";
 
@@ -120,7 +127,7 @@ async function run() {
       const siu = await genImg(subVisualPrompt, process.env.KIE_API_KEY);
       if(siu) subImgHtml = "<figure><img src='" + siu + "'></figure>";
     }
-    const prompt = "Write chapter: " + cls[p].t + " for topic: " + title + " in " + lang + ". Use story-telling and professional tone.";
+    const prompt = "Write chapter: " + cls[p].t + " for topic: " + title + " in " + lang + ". Use story-telling and professional tone. Break down with <h3> as sub-headings.";
     const contentRaw = await callAI(model, prompt, true);
     const content = clean(contentRaw, true);
     bodyContent += `<h2 id='section${p+1}'>🚀 ${cls[p].t}</h2>` + subImgHtml + content + "<div class='vue-ad'></div>";
