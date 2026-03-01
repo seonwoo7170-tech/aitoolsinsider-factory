@@ -171,8 +171,9 @@ async function genImg(prompt, model, i, skipUpload = false) {
     } catch(e) { return url; }
 }
 
-async function writeAndPost(model, target, lang, blogger, bId, pTime, extraLinks = [], idx, total) {
-    const { text: searchData, raw: searchRaw } = await searchSerper(target, lang);
+async function writeAndPost(model, target, lang, blogger, bId, pTime, extraLinks = [], idx, total, searchQuery = '') {
+    const finalQuery = searchQuery ? `${target} ${searchQuery}` : target;
+    const { text: searchData, raw: searchRaw } = await searchSerper(finalQuery, lang);
     if (searchRaw.length > 0) {
         report(`🔍 [Search Data] 관련 자료 ${searchRaw.length}건 확보:`);
         searchRaw.forEach(o => report(`   - ${o.title}: ${o.link}`));
@@ -185,10 +186,10 @@ async function writeAndPost(model, target, lang, blogger, bId, pTime, extraLinks
     report(`🔥 [포스팅 ${idx}/${total}]: '${target}' 집필 및 발행 시작...`);
     const m1 = await callAI(model, MASTER_GUIDELINE + '\\n[MISSION: PART 1] ' + target + '의 최상단 썸네일(IMG_0), H1 제목, 전체 목차(TOC), 그리고 전반부 핵심 본문(전체 6~8개 섹션 중 첫 3~4개 섹션)까지만 작성하라.' + clusterContext + '\\n' + searchData + '\\n★ 제약: 반드시 HTML 태그가 완벽하게 닫힌 상태(문단이나 섹션의 끝)에서 PART 1을 종료할 것.' + langTag);
     report(`   - 미션 1 완료 (${m1.length}자)`);
-    let cleanM1 = m1.replace(/\`\`\`(html|json|javascript|js)?/gi, '').replace(/\n네, 이어서.*?하겠습니다\./gi, '').trim();
+    let cleanM1 = m1.replace(/\`\`\`(html|json|javascript|js)?/gi, '', '').replace(/\n네, 이어서.*?하겠습니다\./gi, '').trim();
     const m2 = await callAI(model, MASTER_GUIDELINE + '\\n[이전 파트 1 내용 (참고용)]: \\n' + cleanM1 + '\\n\\n[MISSION: PART 2] (매우 중요) 위 파트 1의 내용에 끊기지 않고 바로 이어지도록 나머지 후반부 본문(전체 6~8개 섹션 중 남은 H2 섹션들)과 FAQ, 결론을 작성하라.\\n★ 절대 규칙: 앞서 작성된 파트 1의 내용을 절대 중복해서 다시 쓰지 마라. H1, IMG_0, TOC 등은 이미 파트 1에 있으므로 절대 생성 금지! 서론이나 인사말 금지! 마크다운(```html) 금지! 파트 1의 마지막 내용 바로 다음 <h2> 태그부터 순수 HTML 코드만 이어나갈 것.' + langTag);
     report(`   - 미션 2 완료 (${m2.length}자)`);
-    let cleanM2 = m2.replace(/\`\`\`(html|json|javascript|js)?/gi, '').replace(/^네[,\s]+이어서.*?하겠습니다\.?/i, '').replace(/<h1.*?>.*?<\/h1>/gi, '').replace(/<div[^>]*class=['"]toc-box["'][\s\S]*?<\/div>/gi, '').trim();
+    let cleanM2 = m2.replace(/\`\`\`(html|json|javascript|js)?/gi, '', '').replace(/^네[,\s]+이어서.*?하겠습니다\.?/i, '').replace(/<h1.*?>.*?<\/h1>/gi, '').replace(/<div[^>]*class=['"]toc-box["'][\s\S]*?<\/div>/gi, '').trim();
     const fullRaw = cleanM1 + '\n' + cleanM2;
     let finalHtml = fullRaw;
 
@@ -285,27 +286,21 @@ async function run() {
         const list = (config.clusters || []).length > 0 ? config.clusters : ['AI Technology'];
         baseKeyword = list[Math.floor(Math.random() * list.length)];
     }
-    report(`🎯 이번 회차 타겟 키워드 선정: ${baseKeyword}`);
+    report(`🎯 이번 회차 타겟 키워드 선정: \${baseKeyword}`);
     report(`🚀 1개 키워드에 대한 풀 클러스터(메인1+서브4) 작업을 시작합니다.`);
     
     const entropy = new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
     const langName = config.blog_lang === 'en' ? 'English' : 'Korean';
-    const mainTopicPrompt = `[ID: ${entropy}]\\n키워드: \"${baseKeyword}\"\\n위 키워드를 다루는 블로그 '메인 허브 포스트'의 제목을 1개 생성하라.\\n★ 중요: 결과 제목은 반드시 '${langName}'으로 출력하라.\\n★ 2026년 최신 제약 엄수 (클릭률 극대화 필수 규칙):\\n1. '상위 1%', '10년차', '7가지' 등 구체적인 숫자를 무조건 포함할 것.\\n2. '이거 모르면 손해', '충격 진실', '절대 하지마라' 등 손실 회피(FOMO) 심리를 자극할 것.\\n3. 전체를 아우르는 '완벽 종결판', '총정리' 느낌을 엣지있게 표현할 것.\\n- 25~45자 내외. 따옴표 없이 텍스트만 출력.`;
+    const mainTopicPrompt = `[ID: \${entropy}]\\n키워드: \"\${baseKeyword}\"\\n위 키워드를 활용해 구글 상단 노출이 유리한 '구체적인 롱테일(Long-tail) 제목'을 1개 생성하라.\\n★ 중요: 결과 제목은 반드시 '\${langName}'으로 출력하라.\\n★ SEO 필살 전략 (롱테일 최적화 규칙):\\n1. 단순히 키워드만 넣지 말고 'How to', 'Setup guide', 'Review', 'Best practices' 등 사용자의 구체적인 검색 의도를 반영할 것.\\n2. '상위 1%', '2026년 업데이트' 등 신뢰도를 주는 구체적인 숫자를 포함할 것.\\n3. 반드시 제목에 메인 키워드 [ \${baseKeyword} ]가 자연스럽게 포함되어야 한다.\\n- 30~50자 내외. 따옴표 없이 텍스트만 출력.`;
     const seed = await callAI(model, mainTopicPrompt) || baseKeyword;
 
-    report(`🎯 메인 주제 선정: ${seed}`);
+    report(`🎯 메인 주제 선정: \${seed}`);
     report(`🔎 세부 전문 주제(Spoke) 4종 추출 중...`);
-    const subTopicsPrompt = `메인 주제: \"${seed}\"\\n위 주제를 보완할 구체적이고 전문적인 세부 주제 4개를 생성하라.\\n★ 중요: 결과는 반드시 '${langName}'으로 출력(주제1, 주제2, 주제3, 주제4)하라.\\n- 예: AI Marketing -> High-converting prompts, 3 mistakes to avoid, pricing secrets, quick setup guide\\n- 출력 형식: 주제1, 주제2, 주제3, 주제4 (반드시 콤마로만 구분, 다른 부연 설명 금지)`;
+    const subTopicsPrompt = `메인 주제: \"\${seed}\"\\n위 주제를 보완할 아주 구체적이고 니치(Niche)한 세부 주제 4개를 생성하라.\\n★ 중요: 결과는 반드시 '\${langName}'으로 출력(주제1, 주제2, 주제3, 주제4)하라.\\n- 전략: 광범위한 주제 대신 '입문자를 위한 설정법', '숨겨진 꿀팁 3가지', '경쟁 도구와 전격 비교' 등 롱테일 검색어를 타겟팅할 것.\\n- 출력 형식: 주제1, 주제2, 주제3, 주제4 (반드시 콤마로만 구분, 다른 부연 설명 금지)`;
     const subTopicsRaw = await callAI(model, subTopicsPrompt);
     const subTopicBaseList = subTopicsRaw.split(/[\\n,]+/).map(t => t.replace(/^\\d+\\.\\s*/, '').trim()).filter(Boolean).slice(0, 4);
 
     const subLinks = [];
-    const clusterVibes = [
-        ' Practical Strategies & Lessons Learned',
-        ' Insider Secrets Only Experts Know',
-        ' The Ultimate Checklist for Success',
-        ' Hidden Costs and How to Avoid Them'
-    ].sort(() => 0.5 - Math.random());
 
     // [인간미 넘치는 랜덤 예약 시스템: 80분 ~ 180분 간격]
     let currentPubTime = Date.now();
@@ -313,21 +308,21 @@ async function run() {
 
     for (let i = 0; i < 4; i++) {
         currentPubTime += getRandOffset();
-        const baseSub = subTopicBaseList[i] || (baseKeyword + ' related info ' + (i + 1));
-        const subTitlePrompt = `주제: \"${baseSub}\"\\n방금 위 세부 주제로 블로그 클릭률(CTR)을 폭발시킬 가장 자극적이고 전문적인 후킹 제목을 '딱 1개'만 생성하라.\\n★ 중요: 반드시 '${langName}'으로 출력하라.\\n- 문제 해결 약속, 강렬한 혜택(돈, 시간 이득), 부정적 금지어(절대, 피하는 법) 활용.\\n- 20~35자 내외. 여러 개 나열 금지, 부연 설명 금지, 따옴표 없이 딱 1줄 텍스트만 출력.`;
+        const baseSub = subTopicBaseList[i] || (baseKeyword + ' related features');
+        const subTitlePrompt = `세부 주제: \"\${baseSub}\"\\n메인 키워드: \"\${baseKeyword}\"\\n위 주제로 구글 틈새 검색을 장악할 '롱테일(Long-tail) 후킹 제목'을 '딱 1개'만 생성하라.\\n★ 중요: 반드시 '\${langName}'으로 출력하라.\\n- 단순 나열 대신 'How to fix', 'Best ways to', 'Step-by-step' 등 해결책 중심의 문장으로 만들 것.\\n- 반드시 제목에 [ \${baseKeyword} ] 또는 관련 전문 용어가 포함되어야 한다.\\n- 25~45자 내외. 따옴표 없이 딱 1줄 텍스트만 출력.`;
         let targetSub = await callAI(model, subTitlePrompt);
         targetSub = targetSub ? targetSub.split('\\n')[0].replace(/^\\d+\\.\\s*/, '').replace(/[\"\']/g, '').trim() : '';
         if(!targetSub) targetSub = baseSub;
         
-        const res = await writeAndPost(model, targetSub, config.blog_lang || 'ko', blogger, config.blog_id, new Date(currentPubTime), [], i + 1, 5);
+        const res = await writeAndPost(model, targetSub, config.blog_lang || 'ko', blogger, config.blog_id, new Date(currentPubTime), [], i + 1, 5, baseKeyword);
         if(res && res.url) subLinks.push(res);
     }
 
     report('🏆 모든 정보가 집결된 메인 필러 포스트(허브) 집필 시작...');
     currentPubTime += getRandOffset();
-    await writeAndPost(model, seed, config.blog_lang || 'ko', blogger, config.blog_id, new Date(currentPubTime), subLinks, 5, 5);
+    await writeAndPost(model, seed, config.blog_lang || 'ko', blogger, config.blog_id, new Date(currentPubTime), subLinks, 5, 5, baseKeyword);
     
-    report(`✅ [클러스터 완료]: ${baseKeyword} (총 5개 포스팅 완료)`);
+    report(`✅ [클러스터 완료]: \${baseKeyword} (총 5개 포스팅 완료)`);
     report('\\n🌈 선택된 키워드 클러스터 작업이 성공적으로 종료되었습니다.', 'success');
     await uploadReport();
 }
