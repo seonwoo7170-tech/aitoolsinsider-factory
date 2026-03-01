@@ -139,15 +139,15 @@ async function genImg(prompt, model, i, skipUpload = false) {
     let url = '';
     if(process.env.KIE_API_KEY) {
         try {
-            console.log('      [IMG] Kie.ai z-image 모델 호출 중...');
+            console.log(`      [IMG_${i}] Kie.ai z-image 모델 호출 중...`);
             const cr = await axios.post('https://api.kie.ai/api/v1/jobs/createTask', {
                 model: 'z-image',
                 input: { prompt: engPrompt, aspect_ratio: '16:9' }
             }, { headers: { Authorization: 'Bearer ' + process.env.KIE_API_KEY } });
             const tid = cr.data.taskId || cr.data.data?.taskId;
             if(tid) {
-                for(let a=0; a<15; a++) {
-                    await new Promise(r => setTimeout(r, 6000));
+                for(let a=0; a<10; a++) {
+                    await new Promise(r => setTimeout(r, 4500));
                     const pr = await axios.get('https://api.kie.ai/api/v1/jobs/recordInfo?taskId=' + tid, { headers: { Authorization: 'Bearer ' + process.env.KIE_API_KEY } });
                     const state = pr.data.state || pr.data.data?.state;
                     if(state === 'success') {
@@ -190,10 +190,10 @@ async function writeAndPost(model, target, lang, blogger, bId, pTime, extraLinks
     }
     const langTag = `\\n[TARGET_LANGUAGE]: ${lang === 'ko' ? 'Korean' : 'English'}`;
     report(`🔥 [포스팅 ${idx}/${total}]: '\${target}' 집필 및 발행 시작...`);
-    const m1 = await callAI(model, MASTER_GUIDELINE + '\\n[MISSION: PART 1] ' + target + '의 최상단 썸네일(IMG_0), TOC, 그리고 전반부 핵심 본문을 작성하라.' + clusterContext + archiveContext + '\\n' + searchData + '\\n★ 제약: 반드시 HTML 태그가 완벽하게 닫힌 상태에서 PART 1을 종료할 것.' + langTag);
+    const m1 = await callAI(model, MASTER_GUIDELINE + '\\n[MISSION: PART 1] ' + target + '의 최상단 썸네일(IMG_0), TOC, 그리고 🎯전체 6~8개 H2 섹션 중 절반 이상(최소 4~5개)의 방대한 핵심 본문을 매우 상세하게 작성하라. 전체 글의 60~70% 분량을 여기서 모두 뽑아내야 한다.\\n' + searchData + '\\n★ 제약: 반드시 HTML 태그가 완벽하게 닫힌 상태에서 PART 1을 종료할 것.' + langTag);
     report(`   - 미션 1 완료 (${m1.length}자)`);
     let cleanM1 = m1.replace(/\`\`\`(html|json|javascript|js)?/gi, '', '').replace(/\n네, 이어서.*?하겠습니다\./gi, '').trim();
-    const m2 = await callAI(model, MASTER_GUIDELINE + '\\n[이전 파트 1 내용 (참고용)]: \\n' + cleanM1 + '\\n\\n[MISSION: PART 2] (매우 중요) 위 파트 1의 내용에 끊기지 않고 바로 이어지도록 나머지 후반부 본문(전체 6~8개 섹션 중 남은 H2 섹션들)과 FAQ, 결론을 작성하라.\\n★ 절대 규칙: 앞서 작성된 파트 1의 내용을 절대 중복해서 다시 쓰지 마라. H1, IMG_0, TOC 등은 이미 파트 1에 있으므로 절대 생성 금지! 서론이나 인사말 금지! 마크다운(```html) 금지! 파트 1의 마지막 내용 바로 다음 <h2> 태그부터 순수 HTML 코드만 이어나갈 것.' + langTag);
+    const m2 = await callAI(model, MASTER_GUIDELINE + '\\n[이전 파트 1 내용 (참고용)]: \\n' + cleanM1 + '\\n\\n[MISSION: PART 2] (매우 중요) 위 파트 1의 내용에 끊기지 않고 바로 이어지도록 나머지 후반부 본문(남은 H2 섹션 2~3개)과 FAQ, 결론(마무리 박스)을 간결하게 작성하라. (분량 비중 30~40%)' + clusterContext + archiveContext + '\\n★ 절대 규칙: 앞서 작성된 파트 1의 내용을 절대 중복해서 다시 쓰지 마라. H1, IMG_0, TOC 등은 이미 파트 1에 있으므로 절대 생성 금지! 서론이나 인사말 금지! 마크다운(```html) 금지! 파트 1의 마지막 내용 바로 다음 <h2> 태그부터 순수 HTML 코드만 이어나갈 것.' + langTag);
     report(`   - 미션 2 완료 (${m2.length}자)`);
     let cleanM2 = m2.replace(/\`\`\`(html|json|javascript|js)?/gi, '', '').replace(/^네[,\s]+이어서.*?하겠습니다\.?/i, '').replace(/<h1.*?>.*?<\/h1>/gi, '').replace(/<div[^>]*class=['"]toc-box["'][\s\S]*?<\/div>/gi, '').trim();
     const fullRaw = cleanM1 + '\n' + cleanM2;
