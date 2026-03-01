@@ -260,7 +260,7 @@ async function writeAndPost(model, target, lang, blogger, bId, pTime, extraLinks
 
     // [IMG_1~10 메타데이터 추출 및 제거]
     const imgMetas = {};
-    for (let i = 1; i <= 10; i++) {
+    for (let i = 1; i <= 3; i++) {
         const imgMatch = finalHtml.match(new RegExp('IMG_' + i + ':[\\s\\S]*?\\{([\\s\\S]*?)\\}', 'i'));
         if (imgMatch) {
             const rawMeta = imgMatch[1];
@@ -312,7 +312,7 @@ async function writeAndPost(model, target, lang, blogger, bId, pTime, extraLinks
     }
 
     // [IMG_1~10 보충 이미지 실제 생성 및 치환]
-    for (let i = 1; i <= 10; i++) {
+    for (let i = 1; i <= 3; i++) {
         if (finalHtml.includes('[[IMG_' + i + ']]')) {
             const meta = imgMetas[i] || { prompt: target + ' ' + i, alt: target, title: target };
             const urlI = await genImg(meta.prompt, model, i);
