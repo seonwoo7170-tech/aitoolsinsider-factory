@@ -69,12 +69,16 @@ async function callAI(model, prompt, retry = 0, delay = Math.random() * 2000 + 1
     }
 }
 
-async function searchSerper(query) {
-    if(!process.env.SERPER_API_KEY) return '';
+async function searchSerper(query, lang = 'ko') {
+    if(!process.env.SERPER_API_KEY) return { text: '', raw: [] };
     try {
-        const r = await axios.post('https://google.serper.dev/search', { q: query, gl: 'kr', hl: 'ko' }, { headers: { 'X-API-KEY': process.env.SERPER_API_KEY } });
-        return r.data.organic.slice(0, 5).map(o => o.title + ': ' + o.snippet).join('\n');
-    } catch(e) { return ''; }
+        const gl = lang === 'en' ? 'us' : 'kr';
+        const hl = lang === 'en' ? 'en' : 'ko';
+        const r = await axios.post('https://google.serper.dev/search', { q: query, gl, hl }, { headers: { 'X-API-KEY': process.env.SERPER_API_KEY } });
+        const results = r.data.organic.slice(0, 5);
+        const text = results.map(o => o.title + ': ' + o.snippet).join('\\n');
+        return { text, raw: results };
+    } catch(e) { return { text: '', raw: [] }; }
 }
 
 async function genThumbnail(meta, model) {
@@ -168,7 +172,11 @@ async function genImg(prompt, model, i, skipUpload = false) {
 }
 
 async function writeAndPost(model, target, lang, blogger, bId, pTime, extraLinks = [], idx, total) {
-    const searchData = await searchSerper(target);
+    const { text: searchData, raw: searchRaw } = await searchSerper(target, lang);
+    if (searchRaw.length > 0) {
+        report(`🔍 [Search Data] 관련 자료 ${searchRaw.length}건 확보:`);
+        searchRaw.forEach(o => report(`   - ${o.title}: ${o.link}`));
+    }
     let clusterContext = '';
     if(extraLinks.length > 0) {
         clusterContext = '\\n[CLUSTER_HUB] 메인 글 작성 중. 제공된 서브 글들의 링크가 총 ' + extraLinks.length + '개 있습니다.\\n★ 중요 규칙: 모든 링크를 한 섹션에 몰아넣지 말고, 본문 2번 섹션부터 7번 섹션까지 사이사이에 골고루 분산 배치하여 [5-10] 프리미엄 버튼 형식으로 삽입하시오.\\n링크 목록: ' + JSON.stringify(extraLinks);
@@ -274,29 +282,29 @@ async function run() {
     if (config.pillar_topic && config.pillar_topic !== '자동생성') {
         baseKeyword = config.pillar_topic.trim();
     } else {
-        const list = (config.clusters || []).length > 0 ? config.clusters : ['생활 정보'];
+        const list = (config.clusters || []).length > 0 ? config.clusters : ['AI Technology'];
         baseKeyword = list[Math.floor(Math.random() * list.length)];
     }
-
     report(`🎯 이번 회차 타겟 키워드 선정: ${baseKeyword}`);
     report(`🚀 1개 키워드에 대한 풀 클러스터(메인1+서브4) 작업을 시작합니다.`);
     
     const entropy = new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
-    const mainTopicPrompt = `[ID: ${entropy}]\\n키워드: \"${baseKeyword}\"\\n위 키워드를 다루는 블로그 '메인 허브 포스트'의 제목을 1개 생성하라.\\n★ 중요: 입력이 영어여도 결과 제목은 반드시 '한국어'로 출력하라.\\n★ 2026년 최신 제약 엄수 (클릭률 극대화 필수 규칙):\\n1. '상위 1%', '10년차', '7가지' 등 구체적인 숫자를 무조건 포함할 것.\\n2. '이거 모르면 손해', '충격 진실', '절대 하지마라' 등 손실 회피(FOMO) 심리를 자극할 것.\\n3. 전체를 아우르는 '완벽 종결판', '총정리' 느낌을 엣지있게 표현할 것.\\n- 25~45자 내외. 따옴표 없이 텍스트만 출력.`;
+    const langName = config.blog_lang === 'en' ? 'English' : 'Korean';
+    const mainTopicPrompt = `[ID: ${entropy}]\\n키워드: \"${baseKeyword}\"\\n위 키워드를 다루는 블로그 '메인 허브 포스트'의 제목을 1개 생성하라.\\n★ 중요: 결과 제목은 반드시 '${langName}'으로 출력하라.\\n★ 2026년 최신 제약 엄수 (클릭률 극대화 필수 규칙):\\n1. '상위 1%', '10년차', '7가지' 등 구체적인 숫자를 무조건 포함할 것.\\n2. '이거 모르면 손해', '충격 진실', '절대 하지마라' 등 손실 회피(FOMO) 심리를 자극할 것.\\n3. 전체를 아우르는 '완벽 종결판', '총정리' 느낌을 엣지있게 표현할 것.\\n- 25~45자 내외. 따옴표 없이 텍스트만 출력.`;
     const seed = await callAI(model, mainTopicPrompt) || baseKeyword;
 
     report(`🎯 메인 주제 선정: ${seed}`);
     report(`🔎 세부 전문 주제(Spoke) 4종 추출 중...`);
-    const subTopicsPrompt = `메인 주제: \"${seed}\"\\n위 주제를 보완할 구체적이고 전문적인 세부 주제 4개를 생성하라.\\n★ 중요: 결과는 반드시 '한국어'로 출력(주제1, 주제2, 주제3, 주제4)하라.\\n- 예: 컴퓨터 수리 -> 가장 흔한 고장 원인, 절대 하지 말아야 할 실수 3가지, 수리비 덤탱이 피하는 법, 셀프 응급조치법\\n- 출력 형식: 주제1, 주제2, 주제3, 주제4 (반드시 콤마로만 구분, 다른 부연 설명 금지)`;
+    const subTopicsPrompt = `메인 주제: \"${seed}\"\\n위 주제를 보완할 구체적이고 전문적인 세부 주제 4개를 생성하라.\\n★ 중요: 결과는 반드시 '${langName}'으로 출력(주제1, 주제2, 주제3, 주제4)하라.\\n- 예: AI Marketing -> High-converting prompts, 3 mistakes to avoid, pricing secrets, quick setup guide\\n- 출력 형식: 주제1, 주제2, 주제3, 주제4 (반드시 콤마로만 구분, 다른 부연 설명 금지)`;
     const subTopicsRaw = await callAI(model, subTopicsPrompt);
     const subTopicBaseList = subTopicsRaw.split(/[\\n,]+/).map(t => t.replace(/^\\d+\\.\\s*/, '').trim()).filter(Boolean).slice(0, 4);
 
     const subLinks = [];
     const clusterVibes = [
-        ' 실전 해결 전략 및 뼈아픈 실패담',
-        ' 10년차 전문가가 공개하는 절대 하지 말아야 할 행동',
-        ' 돈과 시간을 완벽하게 지키는 기적의 체크리스트',
-        ' 수리비 0원 도전! 당신이 몰랐던 완벽 응급 처치 가이드'
+        ' Practical Strategies & Lessons Learned',
+        ' Insider Secrets Only Experts Know',
+        ' The Ultimate Checklist for Success',
+        ' Hidden Costs and How to Avoid Them'
     ].sort(() => 0.5 - Math.random());
 
     // [인간미 넘치는 랜덤 예약 시스템: 80분 ~ 180분 간격]
@@ -305,22 +313,22 @@ async function run() {
 
     for (let i = 0; i < 4; i++) {
         currentPubTime += getRandOffset();
-        const baseSub = subTopicBaseList[i] || (baseKeyword + ' 관련 정보 ' + (i + 1));
-        const subTitlePrompt = `주제: \"${baseSub}\"\\n방금 위 세부 주제로 블로그 클릭률(CTR)을 폭발시킬 가장 자극적이고 전문적인 후킹 제목을 '딱 1개'만 생성하라.\\n★ 중요: 반드시 '한국어'로 출력하라.\\n- 문제 해결 약속, 강렬한 혜택(돈, 시간 이득), 부정적 금지어(절대, 피하는 법) 활용.\\n- 20~35자 내외. 여러 개 나열 금지, 부연 설명 금지, 따옴표 없이 딱 1줄 텍스트만 출력.`;
+        const baseSub = subTopicBaseList[i] || (baseKeyword + ' related info ' + (i + 1));
+        const subTitlePrompt = `주제: \"${baseSub}\"\\n방금 위 세부 주제로 블로그 클릭률(CTR)을 폭발시킬 가장 자극적이고 전문적인 후킹 제목을 '딱 1개'만 생성하라.\\n★ 중요: 반드시 '${langName}'으로 출력하라.\\n- 문제 해결 약속, 강렬한 혜택(돈, 시간 이득), 부정적 금지어(절대, 피하는 법) 활용.\\n- 20~35자 내외. 여러 개 나열 금지, 부연 설명 금지, 따옴표 없이 딱 1줄 텍스트만 출력.`;
         let targetSub = await callAI(model, subTitlePrompt);
         targetSub = targetSub ? targetSub.split('\\n')[0].replace(/^\\d+\\.\\s*/, '').replace(/[\"\']/g, '').trim() : '';
-        if(!targetSub) targetSub = baseSub + clusterVibes[i % clusterVibes.length];
+        if(!targetSub) targetSub = baseSub;
         
-        const res = await writeAndPost(model, targetSub, 'ko', blogger, config.blog_id, new Date(currentPubTime), [], i + 1, 5);
+        const res = await writeAndPost(model, targetSub, config.blog_lang || 'ko', blogger, config.blog_id, new Date(currentPubTime), [], i + 1, 5);
         if(res && res.url) subLinks.push(res);
     }
 
     report('🏆 모든 정보가 집결된 메인 필러 포스트(허브) 집필 시작...');
     currentPubTime += getRandOffset();
-    await writeAndPost(model, seed, 'ko', blogger, config.blog_id, new Date(currentPubTime), subLinks, 5, 5);
+    await writeAndPost(model, seed, config.blog_lang || 'ko', blogger, config.blog_id, new Date(currentPubTime), subLinks, 5, 5);
     
     report(`✅ [클러스터 완료]: ${baseKeyword} (총 5개 포스팅 완료)`);
-    report('\n🌈 선택된 키워드 클러스터 작업이 성공적으로 종료되었습니다.', 'success');
+    report('\\n🌈 선택된 키워드 클러스터 작업이 성공적으로 종료되었습니다.', 'success');
     await uploadReport();
 }
 run();
