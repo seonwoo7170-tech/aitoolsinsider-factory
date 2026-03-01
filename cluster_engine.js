@@ -158,7 +158,6 @@ async function genImg(prompt, model, i, skipUpload = false, aspectRatio = '16:9'
                     }
                     if(state === 'fail' || state === 'failed') break;
                 }
-                }
             } else { console.log('      ⚠️ [Kie.ai 실패]: taskId 없음', typeof cr.data === 'object' ? JSON.stringify(cr.data) : ''); }
         } catch(e) { console.log('      ⚠️ [Kie.ai z-image 실패]: ' + e.message); }
     }
