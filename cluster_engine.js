@@ -130,7 +130,10 @@ async function genThumbnail(meta, model) {
         const form = new FormData(); form.append('image', buffer.toString('base64'));
         const ir = await axios.post('https://api.imgbb.com/1/upload?key=' + process.env.IMGBB_API_KEY, form, {headers: form.getHeaders() });
         return ir.data.data.url;
-    } catch(e) { report('⚠️ [썸네일 오류]: ' + e.message, 'error'); return ''; }
+    } catch(e) { 
+        report('⚠️ [썸네일 오류/업로드 실패]: ' + e.message + ' (원본 URL 반환)', 'warning'); 
+        return bgUrl || ''; 
+    }
 }
 
 async function genImg(prompt, model, i, skipUpload = false, aspectRatio = '16:9') {
@@ -212,7 +215,7 @@ async function genPinterest(meta, model) {
         const form = new FormData(); form.append('image', buffer.toString('base64'));
         const ir = await axios.post('https://api.imgbb.com/1/upload?key=' + process.env.IMGBB_API_KEY, form, {headers: form.getHeaders() });
         return ir.data.data.url;
-    } catch(e) { report('⚠️ [핀 이미지 오류]: ' + e.message, 'error'); return ''; }
+    } catch(e) { report('⚠️ [핀 이미지 오류/업로드 실패]: ' + e.message, 'warning'); return bgUrl || ''; }
 }
 
 async function writeAndPost(model, target, lang, blogger, bId, pTime, extraLinks = [], idx, total, searchQuery = '', globalArchives = []) {
@@ -241,14 +244,20 @@ async function writeAndPost(model, target, lang, blogger, bId, pTime, extraLinks
     const m1 = await callAI(model, MASTER_GUIDELINE + '\\n[MISSION: PART 1] ' + target + '의 최상단 썸네일(IMG_0), TOC, 그리고 🎯전체 6~8개 H2 섹션 중 절반 이상(최소 4~5개)의 방대한 핵심 본문을 매우 상세하게 작성하라. 전체 글의 60~70% 분량을 여기서 모두 뽑아내야 한다.\\n' + searchData + clusterContext1 + '\\n★ 제약: 반드시 HTML 태그가 완벽하게 닫힌 상태에서 PART 1을 종료할 것.' + langTag);
     report(`   - 미션 1 완료 (${m1.length}자)`);
     let cleanM1 = m1.replace(/\`\`\`(html|json|javascript|js)?/gi, '', '').replace(/\n네, 이어서.*?하겠습니다\./gi, '').trim();
-    const m2 = await callAI(model, MASTER_GUIDELINE + '\\n[이전 파트 1 내용 (참고용)]: \\n' + cleanM1 + '\\n\\n[MISSION: PART 2] (매우 중요) 위 파트 1의 내용에 끊기지 않고 바로 이어지도록 나머지 후반부 본문(남은 H2 섹션 2~3개)과 FAQ, 결론(마무리 박스)을 간결하게 작성하라. (분량 비중 30~40%)' + clusterContext2 + archiveContext + '\\n★ 절대 규칙: 앞서 작성된 파트 1의 내용을 절대 중복해서 다시 쓰지 마라. H1, IMG_0, TOC 등은 이미 파트 1에 있으므로 절대 생성 금지! 서론이나 인사말 금지! 마크다운(```html) 금지! 파트 1의 마지막 내용 바로 다음 <h2> 태그부터 순수 HTML 코드만 이어나갈 것.' + langTag);
+    const m2 = await callAI(model, MASTER_GUIDELINE + '\\n[이전 파트 1 내용 (참고용)]: \\n' + cleanM1 + '\\n\\n[MISSION: PART 2] (매우 중요) 위 파트 1의 내용에 끊기지 않고 바로 이어지도록 나머지 후반부 본문(남은 H2 섹션 2~3개)과 FAQ, 결론(마무리 박스)을 상세히 작성하라. (분량 비중 35~45%)\\n' + clusterContext2 + archiveContext + '\\n★ [중복 가드]: 앞서 작성된 파트 1의 내용을 절대 중복해서 다시 쓰지 마십시오. 특히 서두, IMG_0~3 메타데이터, TOC(목차)는 이미 파트 1에 완벽하게 존재하므로 절대로 다시 생성해서는 안 됩니다. 파트 1의 마지막 문장에서 곧바로 이어지는 다음 <h2> 태그 본문부터 순수 HTML 코드만 출력하세요.\\n★ 마크다운(```html) 금지.' + langTag);
     report(`   - 미션 2 완료 (${m2.length}자)`);
-    let cleanM2 = m2.replace(/\`\`\`(html|json|javascript|js)?/gi, '', '').replace(/^네[,\s]+이어서.*?하겠습니다\.?/i, '').replace(/<h1.*?>.*?<\/h1>/gi, '').replace(/<div[^>]*class=['"]toc-box["'][\s\S]*?<\/div>/gi, '').trim();
-    const fullRaw = cleanM1 + '\n' + cleanM2;
+    let cleanM2 = m2.replace(/\\\`\\\`\\\`(html|json|javascript|js)?/gi, '', '')
+                    .replace(/^네[,\\s]+이어서.*?하겠습니다\\.?/i, '')
+                    .replace(/IMG_\\\\d+:[\\\\s\\\\S]*?\\\\??\\\\{([\\\\s\\\\S]*?)\\\\??\\\\}/gi, '')
+                    .replace(/<h1.*?>.*?<\\/h1>/gi, '')
+                    .replace(/<div[^>]*class=['\"]toc-box['\"][^>]*>[\\\\s\\\\S]*?<\\/div>/gi, '')
+                    .replace(/<div(?:\\\\s+[^>]*)?>\\\\s*<h\\\\d[^>]*>(?:Table of Contents|핵심 요약 목차|목차)<\\/h\\\\d>[\\\\s\\\\S]*?<\\/div>/gi, '')
+                    .trim();
+    const fullRaw = cleanM1 + '\\n' + cleanM2;
     let finalHtml = fullRaw;
 
     // [IMG_0 썸네일 추출 및 제거]
-    const m0Match = finalHtml.match(/IMG_0:[\s\S]*?\{([\s\S]*?)\}/i);
+    const m0Match = finalHtml.match(/IMG_0:[\s\S]*?\\??\{([\s\S]*?)\\??\}/i);
     let m0 = null;
     if (m0Match) {
         const rawMeta = m0Match[1];
@@ -264,7 +273,7 @@ async function writeAndPost(model, target, lang, blogger, bId, pTime, extraLinks
     // [IMG_1~10 메타데이터 추출 및 제거]
     const imgMetas = {};
     for (let i = 1; i <= 3; i++) {
-        const imgMatch = finalHtml.match(new RegExp('IMG_' + i + ':[\\s\\S]*?\\{([\\s\\S]*?)\\}', 'i'));
+        const imgMatch = finalHtml.match(new RegExp('IMG_' + i + ':[\\s\\S]*?\\??\\{([\\s\\S]*?)\\??\\}', 'i'));
         if (imgMatch) {
             const rawMeta = imgMatch[1];
             imgMetas[i] = {
@@ -302,7 +311,8 @@ async function writeAndPost(model, target, lang, blogger, bId, pTime, extraLinks
     }
 
     // [IMG_0 썸네일 및 핀터레스트 이미지 생성 및 치환]
-    if (m0 && finalHtml.includes('[[IMG_0]]')) {
+    const img0Regex = /\\??\\[\\??\\[IMG_0\\??\\]\\??\\]/gi;
+    if (m0 && img0Regex.test(finalHtml)) {
         const [url0, pinUrl] = await Promise.all([
             genThumbnail(m0, model),
             genPinterest(m0, model)
@@ -311,15 +321,16 @@ async function writeAndPost(model, target, lang, blogger, bId, pTime, extraLinks
         if (pinUrl) {
             insertHtml = `<div style='display:none;'><img src='${pinUrl}' data-pin-media='${pinUrl}' alt='${m0.mainTitle}' /></div>` + insertHtml;
         }
-        finalHtml = finalHtml.split('[[IMG_0]]').join(insertHtml);
+        finalHtml = finalHtml.replace(img0Regex, insertHtml);
     }
 
     // [IMG_1~10 보충 이미지 실제 생성 및 치환]
     for (let i = 1; i <= 3; i++) {
-        if (finalHtml.includes('[[IMG_' + i + ']]')) {
+        const imgRegex = new RegExp('\\\\??\\[\\\\??\\[IMG_' + i + '\\\\??\\]\\\\??\\]', 'gi');
+        if (imgRegex.test(finalHtml)) {
             const meta = imgMetas[i] || { prompt: target + ' ' + i, alt: target, title: target };
             const urlI = await genImg(meta.prompt, model, i);
-            finalHtml = finalHtml.split('[[IMG_' + i + ']]').join(`<img src='${urlI}' alt='${meta.alt}' title='${meta.title}' style='width:100%; border-radius:12px; margin:35px 0; box-shadow: 0 5px 15px rgba(0,0,0,0.08);'>`);
+            finalHtml = finalHtml.replace(imgRegex, `<img src='${urlI}' alt='${meta.alt}' title='${meta.title}' style='width:100%; border-radius:12px; margin:35px 0; box-shadow: 0 5px 15px rgba(0,0,0,0.08);'>`);
         }
     }
 
