@@ -171,7 +171,7 @@ async function genImg(prompt, model, i, skipUpload = false) {
     } catch(e) { return url; }
 }
 
-async function writeAndPost(model, target, lang, blogger, bId, pTime, extraLinks = [], idx, total, searchQuery = '') {
+async function writeAndPost(model, target, lang, blogger, bId, pTime, extraLinks = [], idx, total, searchQuery = '', globalArchives = []) {
     const finalQuery = searchQuery ? `${target} ${searchQuery}` : target;
     const { text: searchData, raw: searchRaw } = await searchSerper(finalQuery, lang);
     if (searchRaw.length > 0) {
