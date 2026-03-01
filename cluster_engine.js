@@ -133,7 +133,7 @@ async function genThumbnail(meta, model) {
     } catch(e) { report('⚠️ [썸네일 오류]: ' + e.message, 'error'); return ''; }
 }
 
-async function genImg(prompt, model, i, skipUpload = false) {
+async function genImg(prompt, model, i, skipUpload = false, aspectRatio = '16:9') {
     if(!prompt) return '';
     const engPrompt = prompt.replace(/[^a-zA-Z0-9, ]/gi, '').trim() + ', hyper-realistic, 8k';
     let url = '';
@@ -142,7 +142,7 @@ async function genImg(prompt, model, i, skipUpload = false) {
             console.log(`      [IMG_${i}] Kie.ai z-image 모델 호출 중...`);
             const cr = await axios.post('https://api.kie.ai/api/v1/jobs/createTask', {
                 model: 'z-image',
-                input: { prompt: engPrompt, aspect_ratio: '16:9' }
+                input: { prompt: engPrompt, aspect_ratio: aspectRatio }
             }, { headers: { Authorization: 'Bearer ' + process.env.KIE_API_KEY } });
             const tid = cr.data.taskId || cr.data.data?.taskId;
             if(tid) {
@@ -161,7 +161,11 @@ async function genImg(prompt, model, i, skipUpload = false) {
             }
         } catch(e) { console.log('      ⚠️ [Kie.ai z-image 실패]: ' + e.message); }
     }
-    if(!url) url = `https://image.pollinations.ai/prompt/${encodeURIComponent(engPrompt)}?width=1280&height=720&nologo=true&seed=${Math.floor(Math.random()*1000)}`;
+    if(!url) {
+        let w = 1280, h = 720;
+        if (aspectRatio === '2:3') { w = 1000; h = 1500; }
+        url = `https://image.pollinations.ai/prompt/${encodeURIComponent(engPrompt)}?width=${w}&height=${h}&nologo=true&seed=${Math.floor(Math.random()*1000)}`;
+    }
     if(skipUpload || !process.env.IMGBB_API_KEY) return url;
     try {
         const res = await axios.get(url, { responseType: 'arraybuffer' });
@@ -169,6 +173,46 @@ async function genImg(prompt, model, i, skipUpload = false) {
         const ir = await axios.post('https://api.imgbb.com/1/upload?key=' + process.env.IMGBB_API_KEY, form, {headers: form.getHeaders() });
         return ir.data.data.url;
     } catch(e) { return url; }
+}
+
+async function genPinterest(meta, model) {
+    try {
+        report('📌 [PIN_IMG]: 핀터레스트용 세로형 이미지 제작 시작 (' + meta.mainTitle + ')');
+        const bgUrl = await genImg(meta.bgPrompt, model, 'PIN', true, '2:3');
+        const canvas = createCanvas(1000, 1500);
+        const ctx = canvas.getContext('2d');
+        const bg = await loadImage(bgUrl);
+        
+        ctx.drawImage(bg, 0, 0, 1000, 1500);
+        const grad = ctx.createLinearGradient(0, 500, 0, 1500);
+        grad.addColorStop(0, 'rgba(0, 0, 0, 0)');
+        grad.addColorStop(1, 'rgba(0, 0, 0, 0.9)');
+        ctx.fillStyle = grad; ctx.fillRect(0, 0, 1000, 1500);
+        
+        const tag = (meta.tag || 'EXCLUSIVE').toUpperCase();
+        ctx.font = 'bold 28px "Malgun Gothic", "Apple SD Gothic Neo", sans-serif';
+        const padding = 20;
+        const tagWidth = ctx.measureText(tag).width;
+        ctx.fillStyle = '#e60023'; ctx.fillRect(60, 1180, tagWidth + padding * 2, 45);
+        ctx.fillStyle = '#fff'; ctx.fillText(tag, 60 + padding, 1212);
+        
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.8)'; ctx.shadowBlur = 10; ctx.shadowOffsetX = 3; ctx.shadowOffsetY = 3;
+        ctx.fillStyle = '#ffffff'; ctx.font = 'bold 78px "Malgun Gothic", "Apple SD Gothic Neo", sans-serif';
+        const mainTitle = meta.mainTitle || 'No Title';
+        const words = mainTitle.split(' ');
+        let line1 = '', line2 = '';
+        if(words.length > 3) {
+            line1 = words.slice(0, 3).join(' ');
+            line2 = words.slice(3).join(' ');
+        } else { line1 = mainTitle; }
+        ctx.fillText(line1, 70, 1320);
+        if(line2) ctx.fillText(line2, 70, 1420);
+        
+        const buffer = canvas.toBuffer('image/jpeg');
+        const form = new FormData(); form.append('image', buffer.toString('base64'));
+        const ir = await axios.post('https://api.imgbb.com/1/upload?key=' + process.env.IMGBB_API_KEY, form, {headers: form.getHeaders() });
+        return ir.data.data.url;
+    } catch(e) { report('⚠️ [핀 이미지 오류]: ' + e.message, 'error'); return ''; }
 }
 
 async function writeAndPost(model, target, lang, blogger, bId, pTime, extraLinks = [], idx, total, searchQuery = '', globalArchives = []) {
@@ -253,10 +297,17 @@ async function writeAndPost(model, target, lang, blogger, bId, pTime, extraLinks
         finalHtml = '[[IMG_0]]\\n' + finalHtml;
     }
 
-    // [IMG_0 썸네일 실제 생성 및 치환]
+    // [IMG_0 썸네일 및 핀터레스트 이미지 생성 및 치환]
     if (m0 && finalHtml.includes('[[IMG_0]]')) {
-        const url0 = await genThumbnail(m0, model);
-        finalHtml = finalHtml.split('[[IMG_0]]').join(`<img src='${url0}' alt='${m0.mainTitle}' style='width:100%; border-radius:15px; margin-bottom:40px; box-shadow: 0 10px 30px rgba(0,0,0,0.1);'>`);
+        const [url0, pinUrl] = await Promise.all([
+            genThumbnail(m0, model),
+            genPinterest(m0, model)
+        ]);
+        let insertHtml = `<img src='${url0}' alt='${m0.mainTitle}' style='width:100%; border-radius:15px; margin-bottom:40px; box-shadow: 0 10px 30px rgba(0,0,0,0.1);'>`;
+        if (pinUrl) {
+            insertHtml = `<div style='display:none;'><img src='${pinUrl}' data-pin-media='${pinUrl}' alt='${m0.mainTitle}' /></div>` + insertHtml;
+        }
+        finalHtml = finalHtml.split('[[IMG_0]]').join(insertHtml);
     }
 
     // [IMG_1~10 보충 이미지 실제 생성 및 치환]
