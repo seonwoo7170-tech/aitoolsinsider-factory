@@ -1,35 +1,26 @@
-name: VUE-ORACLE-MASTER
+name: VUE Cluster Auto Post
 on:
   schedule:
-    - cron: "0 0 * * *"
-  workflow_dispatch: {}
+    - cron: '0 0 * * *'
+  workflow_dispatch:
 jobs:
   post:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    env:
-      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-      SERPER_API_KEY: ${{ secrets.SERPER_API_KEY }}
-      IMGBB_API_KEY: ${{ secrets.IMGBB_API_KEY }}
-      KIE_API_KEY: ${{ secrets.KIE_API_KEY }}
-      BLOG_ID: ${{ secrets.BLOG_ID }}
-      GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
-      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
-      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
         with:
-          fetch-depth: 1
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: 'cluster_engine.js'
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev fonts-nanum
-          npm install googleapis @google/generative-ai axios form-data canvas p-limit@3.1.0 --prefer-offline
-      - name: Run Engine
-        run: node cluster_engine.js
+          node-version: 18
+      - run: npm install googleapis @google/generative-ai axios form-data canvas p-limit
+      - run: node cluster_engine.js
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          SERPER_API_KEY: ${{ secrets.SERPER_API_KEY }}
+          IMGBB_API_KEY: ${{ secrets.IMGBB_API_KEY }}
+          KIE_API_KEY: ${{ secrets.KIE_API_KEY }}
+          BLOG_ID: ${{ secrets.BLOG_ID }}
+          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
