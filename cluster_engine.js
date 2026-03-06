@@ -1118,25 +1118,26 @@ async function run() {
         config.selected_persona = ''; // 고정 키워드 시에는 페르소나 명시 안 함(기본값 사용)
     }
 
-    // 1단계: 세부 주제 추출 (강력한 SEO 전략 적용)
+    // 1단계: 세부 주제 추출 (강력한 SEO 전략 + 페르소나 적용)
     const langName = config.blog_lang === 'ko' ? 'Korean' : 'English';
-    const clusterPrompt = `You are a 10-year veteran blog Google SEO expert specializing in Topic Clusters.
+    const personaTag = config.selected_persona ? `\n[SPECIFIC_PERSONA]: ${config.selected_persona}` : '';
+
+    const clusterPrompt = `You are a 10-year veteran blog Google SEO expert specializing in Topic Clusters.${personaTag}
     Today's date is ${getKST().toISOString().split('T')[0]}. 
     Niche: '${baseKeyword}'
     
     ★ MISSION: Create 5 high-performing blog post titles (1 Pillar + 4 Spokes) in ${langName} that dominate Google Search.
     
-    [SEO STRATEGIES TO APPLY]:
-    1. **Recency (2026)**: Always include '2026' in titles to trigger Google's freshness algorithm.
-    2. **Listicles (Numbers)**: Use specific numbers like "Top 7", "5 Best", "10 Ways" for Spoke posts to increase CTR.
-    3. **Powerful Benefits**: Don't just list topics; mention a specific benefit (e.g., "Keep Your PC Like New", "Save 10 Hours a Week").
-    4. **Long-tail & Problem-Solving**: Address specific pain points (e.g., "Fixing Slow Boot", "Stopping Lag") rather than broad terms.
-    5. **No Numbered Heading**: NEVER use numbers like "1.", "2." or "Step 1" in titles. Titles should be natural phrases.
+    [IMPORTANT: PERSONA VOICE]:
+    - Use the vocabulary, tone, and perspective of the [SPECIFIC_PERSONA] defined above.
+    - If the persona is an engineer, be technical and precise. If a chef, be sensory and authoritative.
     
-    [REQUIREMENTS]:
-    - Pillar Title: Broad enough to be a 'Ultimate Guide' but with a powerful benefit.
-    - Spoke Titles: Highly specific, using numbers and target-specific solutions.
-    - All titles MUST reflect the current context of ${new Date().getFullYear()}.
+    [SEO STRATEGIES TO APPLY]:
+    1. **Recency (2026)**: Include '2026' naturally to trigger freshness.
+    2. **Title Variety**: **DO NOT** use the same structure for all titles. Mix styles: Curiosity, Expert Opinion, Question-Based, Case Study, and 1-2 occasional Listicles.
+    3. **Powerful Benefits**: Mention a specific, visceral benefit suited to your persona.
+    4. **No Generic Fillers**: Avoid repetitive hooks like "Ultimate Guide". Use unique, persona-driven authority hooks.
+    5. **No Numbered Heading**: NEVER use "1.", "2." in titles.
     
     Output ONLY a JSON array of 5 titles string.`;
     const clusterRes = await callAI(model, clusterPrompt);
