@@ -3,6 +3,8 @@
   "blog_lang": "en",
   "post_mode": "single",
   "daily_count": 1,
+  "schedule_time": "06:00",
+  "random_delay": false,
   "pillar_topic": "자동생성",
   "target_categories": [
     "4"
