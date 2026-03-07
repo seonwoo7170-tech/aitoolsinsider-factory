@@ -3,7 +3,45 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const fs = require('fs');
 const axios = require('axios');
 const FormData = require('form-data');
-const { createCanvas, loadImage } = require('canvas');
+const { createCanvas, loadImage, registerFont } = require('canvas');
+const path = require('path');
+
+// [FONT_FIX] 프리미엄 썸네일 폰트 (G마켓 산스 Bold) 및 백업 폰트 설정
+const fontDir = path.join(__dirname, 'assets', 'fonts');
+const localGmarket = path.join(fontDir, 'GmarketSansBold.ttf');
+const localPretendard = path.join(fontDir, 'Pretendard-Black.ttf');
+
+const fontPaths = [
+    { path: localGmarket, family: 'GmarketSans' },
+    { path: localPretendard, family: 'Pretendard' },
+    { path: path.join(process.env.WINDIR || 'C:\\Windows', 'Fonts', 'malgunbd.ttf'), family: 'VUE_K_Font' },
+    { path: '/usr/share/fonts/truetype/nanum/NanumGothicBold.ttf', family: 'VUE_K_Font' }
+];
+
+let activeFont = 'sans-serif';
+let fontFound = false;
+
+for (const fontInfo of fontPaths) {
+    if (fs.existsSync(fontInfo.path)) {
+        try {
+            registerFont(fontInfo.path, { family: fontInfo.family });
+            activeFont = fontInfo.family;
+            fontFound = true;
+            console.log(`✅ 폰트 등록 완료: ${path.basename(fontInfo.path)} (Family: ${fontInfo.family})`);
+            break;
+        } catch (e) {
+            console.log(`⚠️ 폰트 등록 실패 (${path.basename(fontInfo.path)}): ${e.message}`);
+        }
+    }
+}
+
+
+if (!fontFound) {
+    console.log('🚨 사용 가능한 폰트를 찾지 못했습니다. 시스템 기본 폰트를 시도합니다.');
+}
+
+
+
 
 // --- [LOCAL_SETUP] Load secrets from secrets_config.json ---
 if (fs.existsSync('secrets_config.json')) {
@@ -689,15 +727,17 @@ const STYLE = `
 <div class='vue-premium'>
 `;
 
-function getKST() {
-    const now = new Date();
-    const kstOffset = 9 * 60 * 60 * 1000;
-    return new Date(now.getTime() + (now.getTimezoneOffset() * 60 * 1000) + kstOffset);
+function getKSTDateString() {
+    return new Date(Date.now() + 9 * 3600000).toISOString().split('T')[0];
+}
+
+function getLogTime() {
+    return new Date(Date.now() + 9 * 3600000).toISOString().split('T')[1].substring(0, 8);
 }
 
 function report(msg, type = 'info') {
     const icon = type === 'success' ? '✅' : type === 'warning' ? '⚠️' : type === 'error' ? '🚨' : 'ℹ️';
-    const logMsg = `[${getKST().toLocaleTimeString('ko-KR')}] ${icon} ${msg}`;
+    const logMsg = `[${getLogTime()} KST] ${icon} ${msg}`;
     console.log(logMsg);
 }
 
@@ -741,9 +781,9 @@ async function searchSerper(query, lang) {
     }
 }
 
-async function genImg(prompt, model, idx) {
+async function genImg(prompt, model, idx, ratio = '16:9') {
     try {
-        const revised = await callAI(model, `Provide a high-quality stable diffusion prompt (16:9) based on: ${prompt}. Output only prompt.`);
+        const revised = await callAI(model, `Provide a high-quality stable diffusion prompt (${ratio}) based on: ${prompt}. Output only prompt.`);
         const cleanPrompt = revised.trim().replace(/^"|"$/g, '');
         report(`🎨 [이미지 설계]: ${cleanPrompt.substring(0, 100)}${cleanPrompt.length > 100 ? '...' : ''}`);
 
@@ -756,7 +796,7 @@ async function genImg(prompt, model, idx) {
                 report(`   ㄴ [Kie.ai] z-image 호출 중 (이미지 생성)...`);
                 const cr = await axios.post('https://api.kie.ai/api/v1/jobs/createTask', {
                     model: 'z-image',
-                    input: { prompt: revised + ', high-end, editorial photography, 8k', aspect_ratio: '16:9' }
+                    input: { prompt: revised + ', high-end, editorial photography, 8k', aspect_ratio: ratio }
                 }, { headers: { Authorization: 'Bearer ' + kieKey }, timeout: 20000 });
 
                 const tid = cr.data.taskId || cr.data.data?.taskId;
@@ -779,7 +819,8 @@ async function genImg(prompt, model, idx) {
 
         // 2. Pollinations.ai (FLUX Fallback)
         if (!imageUrl) {
-            imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(revised)}?width=1080&height=720&seed=${Math.floor(Math.random() * 99999)}&nologo=true&enhance=true`;
+            const [w, h] = ratio === '2:3' ? [800, 1200] : [1080, 720];
+            imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(revised)}?width=${w}&height=${h}&seed=${Math.floor(Math.random() * 99999)}&nologo=true&enhance=true`;
         }
 
         // 3. ImgBB Upload (영구 보관)
@@ -830,60 +871,110 @@ async function genImg(prompt, model, idx) {
     }
 }
 
-async function genThumbnail(meta, model) {
+async function genThumbnail(meta, model, ratio = '16:9') {
     try {
-        const bgUrl = await genImg(meta.bgPrompt || meta.mainTitle, model, 0);
+        const bgUrl = await genImg(meta.bgPrompt || meta.prompt || meta.mainTitle || target, model, 0, ratio);
         const bg = await loadImage(bgUrl);
-        const cv = createCanvas(1200, 630);
+        const isPin = ratio === '2:3';
+        const w = isPin ? 800 : 1200;
+        const h = isPin ? 1200 : 630;
+        const cv = createCanvas(w, h);
         const ctx = cv.getContext('2d');
-        ctx.drawImage(bg, 0, 0, 1200, 630);
-        ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(0, 0, 1200, 630);
-        ctx.fillStyle = '#fff'; ctx.textAlign = 'center';
-        ctx.font = 'bold 55px sans-serif';
-
-        const words = meta.mainTitle.split(' ');
-        let line = ''; let y = 280;
-        for (let n = 0; n < words.length; n++) {
-            let testLine = line + words[n] + ' ';
-            if (ctx.measureText(testLine).width > 1000 && n > 0) {
-                ctx.fillText(line.trim(), 600, y);
-                line = words[n] + ' ';
-                y += 65;
-            } else {
-                line = testLine;
-            }
+        ctx.drawImage(bg, 0, 0, w, h);
+        if (isPin) {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+            ctx.fillRect(0, 0, w, h);
         }
-        ctx.fillText(line.trim(), 600, y);
+        const grad = ctx.createLinearGradient(0, h * 0.3, 0, h);
+        grad.addColorStop(0, 'rgba(0,0,0,0)');
+        grad.addColorStop(0.6, 'rgba(0,0,0,0.7)');
+        grad.addColorStop(1, 'rgba(0,0,0,0.95)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, w, h);
+        ctx.fillStyle = '#ffffff';
+        ctx.textAlign = 'center';
+        ctx.shadowColor = 'rgba(0,0,0,0.9)';
+        ctx.shadowBlur = 15;
+        const mainTitle = (meta.mainTitle || meta.prompt || '').trim();
+        const isKorean = /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(mainTitle);
+        let fontSize = isPin ? (isKorean ? 68 : 58) : 60;
+        ctx.font = `bold ${fontSize}px "${activeFont}", "Malgun Gothic", "NanumGothic", "Arial", sans-serif`;
+
+        let lines = [];
+        let maxLineW = w * 0.82;
+        if (isKorean) {
+            let currentLine = '';
+            for (let char of mainTitle) {
+                let testLine = currentLine + char;
+                if (ctx.measureText(testLine).width > maxLineW) {
+                    lines.push(currentLine);
+                    currentLine = char;
+                } else {
+                    currentLine = testLine;
+                }
+            }
+            lines.push(currentLine);
+        } else {
+            let words = mainTitle.split(' ');
+            let currentLine = '';
+            for (let word of words) {
+                let testLine = currentLine + word + ' ';
+                if (ctx.measureText(testLine).width > maxLineW) {
+                    lines.push(currentLine.trim());
+                    currentLine = word + ' ';
+                } else {
+                    currentLine = testLine;
+                }
+            }
+            lines.push(currentLine.trim());
+        }
+
+        if (lines.length > 4) {
+            fontSize = Math.floor(fontSize * 0.8);
+        }
+        ctx.font = `bold ${fontSize}px "${activeFont}", "Malgun Gothic", "NanumGothic", sans-serif`;
+
+        const totalH = lines.length * (fontSize + 18);
+        let y = isPin ? (h * 0.8) - (totalH / 2) : (h * 0.55) - (totalH / 2);
+        for (let l of lines) {
+            ctx.fillText(l, w / 2, y);
+            y += fontSize + 18;
+        }
+
+        // [ATTRIBUTION_FIX] 하단 라벨 추가
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = `bold 28px "${activeFont}", sans-serif`;
+        ctx.fillText('designed by smileseon', w / 2, h * 0.9);
 
         const form = new FormData();
         form.append('image', cv.toBuffer('image/jpeg').toString('base64'));
         const ir = await axios.post('https://api.imgbb.com/1/upload?key=' + process.env.IMGBB_API_KEY, form, { headers: form.getHeaders() });
         return ir.data.data.url;
     } catch (e) {
-        return await genImg(meta.mainTitle, model, 0);
+        return await genImg(meta.mainTitle || meta.prompt, model, 0, ratio);
     }
 }
+
+
+
 
 async function writeAndPost(model, target, lang, blogger, bId, pTime, extraLinks = [], idx, total, persona = '') {
     const { text: searchData } = await searchSerper(target, lang);
     let pillarContext = '';
 
     if (extraLinks.length > 0) {
-        const links = extraLinks.map((l, idx) => `[Spoke ${idx + 1}] Title: ${l.title}, URL: ${l.url}`).join('\n');
         const isKo = lang === 'ko';
-        const btnText = isKo ? "자세히 보기 →" : "Read More →";
+        const btnText = isKo ? "▶ 관련 가이드 자세히 보기" : "▶ Read More Guide";
+        const links = extraLinks.map((l, idx) => `[서브글 ${idx + 1}] 제목: ${l.title}\n[복사해서 본문에 넣을 HTML 코드]:\n<div style='margin: 40px 0;'><p style='font-size:16px; font-weight:700; color:#334155;'>🎯 Related Deep Dive:</p><a href='${l.url}' class='cluster-btn'>${l.title} ${btnText}</a></div>`).join('\n\n');
+
         const contextPrompt = isKo
-            ? `[INTERNAL_LINK_MISSION]: 이 포스팅은 메인 허브(Pillar) 글입니다. 
-            아래 제공된 ${extraLinks.length}개의 서브 글들을 포스팅 초반부(섹션 2~5)에 **하나도 빠짐없이 각각 별도의 독립된 H2 섹션으로** 작성하세요.
-            절대로 두 개 이상의 글을 한 섹션에 합치지 마세요.
-            각 섹션의 마지막에는 반드시 해당 글의 URL을 연결한 <a href='URL' class='cluster-btn'>${btnText}</a> 버튼을 정확히 한 개씩(총 ${extraLinks.length}개) 삽입해야 합니다.
-            이것은 블로그 지수의 핵심인 내부 링크 구조이므로 누락 시 즉시 실패로 간주합니다.`
-            : `[INTERNAL_LINK_MISSION]: This is a Pillar post. 
-            Summarize the following ${extraLinks.length} Spoke posts into **separate and independent H2 sections** for EACH link.
-            DO NOT combine multiple topics into one section.
-            At the end of EVERY summary section, you MUST insert exactly one button: <a href='URL' class='cluster-btn'>${btnText}</a>.
-            Total number of buttons must be exactly ${extraLinks.length}. This is a strict SEO requirement.`;
-        pillarContext = `\n${contextPrompt}\n${links}`;
+            ? `[INTERNAL_LINK_PUNITIVE_MISSION]: 이 포스팅은 메인 허브(Pillar) 글입니다. 
+            ★ 절대 규칙: 아래 제공된 ${extraLinks.length}개의 <서브글> 리스트를 기반으로, 본문 중간중간 관련된 내용이 나올 때 해당 서브글로 이동하는 버튼을 **반드시 각각 하나씩** 삽입하세요.
+            ⚠️ 엉뚱한 링크를 만들지 마세요! 아래 리스트에 있는 **[복사해서 본문에 넣을 HTML 코드]**를 1글자도 바꾸지 말고 그대로 복사해서 배치만 하세요.`
+            : `[INTERNAL_LINK_PUNITIVE_MISSION]: This is a Pillar post. 
+            ★ STRICT RULE: You must insert exactly ${extraLinks.length} buttons in the article body linking to the provided sub-articles.
+            ⚠️ DO NOT generate your own links! Simply COPY AND PASTE the exact **[복사해서 본문에 넣을 HTML 코드]** provided below into appropriate related sections of your content.`;
+        pillarContext = `\n${contextPrompt}\n\n[서브글 목록 및 주입용 코드]\n${links}`;
     }
 
     const personaTag = persona ? `\n[SPECIFIC_PERSONA]: ${persona}` : '';
@@ -895,6 +986,11 @@ async function writeAndPost(model, target, lang, blogger, bId, pTime, extraLinks
         ? "<h1>(10년차 SEO 전문가의 구글 상단 노출을 위한 롱테일 키워드 제목)</h1>"
         : "<h1>(SEO Optimized Long-tail Keyword Title for Google Ranking)</h1>";
 
+    const metaTitles = lang === 'ko'
+
+        ? { thumb: "썸네일용 매력적인 짧은 한글 제목", pin: "핀터레스트용 세로형 매력적인 한글 제목" }
+        : { thumb: "Short, eye-catching English title for thumbnail", pin: "Viral English title for Pinterest vertical pin" };
+
     // MISSION 분량 확보를 위한 강력한 지침 추가
     const m1Prompt = MASTER_GUIDELINE + `
 [MISSION: FULL POST GENERATION] 
@@ -904,7 +1000,7 @@ async function writeAndPost(model, target, lang, blogger, bId, pTime, extraLinks
 [필수 디자인 컴포넌트 - 반드시 본문에 포함하세요]:
 ★ 배치 전략:
     - 글이 지루해지지 않도록, H2 텍스트가 2개째 등장하는 타이밍마다 삽입하여 독자의 시선을 적절하게 환기하세요.
-    - **[Time Awareness]**: Today's date is ${getKST().toISOString().split('T')[0]}. Always write based on the latest available information as of today. If referencing years, focus on the current year and future trends.
+    - **[Time Awareness]**: Today's date is ${getKSTDateString()}. Always write based on the latest available information as of today. If referencing years, focus on the current year and future trends.
 
 (A) 인사이트 박스 → <div class='insight-box'><strong>💡 Key Insight</strong><br>핵심 포인트 내용</div> — 최소 2개
 (B) 전문가 꿀팁 → <div class='tip-box'><strong>💡 Smileseon's Pro Tip</strong><br>꿀팁 내용</div> — 최소 2개
@@ -917,12 +1013,14 @@ async function writeAndPost(model, target, lang, blogger, bId, pTime, extraLinks
 
 [META_DATA_START]
 {
-  "IMG_0": { "mainTitle": "썸네일용 매력적인 짧은 제목", "bgPrompt": "썸네일 배경 이미지 묘사 영문 프롬프트" },
+  "IMG_0": { "mainTitle": "${metaTitles.thumb}", "bgPrompt": "썸네일 배경 이미지 묘사 영문 프롬프트" },
   "IMG_1": { "prompt": "본문 첫번째 이미지 묘사 영문 프롬프트" },
   "IMG_2": { "prompt": "본문 두번째 이미지 묘사 영문 프롬프트" },
-  "IMG_3": { "prompt": "본문 세번째 이미지 묘사 영문 프롬프트" }
+  "IMG_3": { "prompt": "본문 세번째 이미지 묘사 영문 프롬프트" },
+  "IMG_PINTEREST": { "mainTitle": "${metaTitles.pin}", "prompt": "Pinterest 전용 세로형(2:3) 고퀄리티 이미지 묘사 영문 프롬프트" }
 }
 [META_DATA_END]
+
 
 [CONTENT_START]
 ${h1Instruction}
@@ -974,6 +1072,7 @@ ${langTag}`;
             if (metaJson.IMG_1) imgMetas[1] = metaJson.IMG_1;
             if (metaJson.IMG_2) imgMetas[2] = metaJson.IMG_2;
             if (metaJson.IMG_3) imgMetas[3] = metaJson.IMG_3;
+            if (metaJson.IMG_PINTEREST) imgMetas['P'] = metaJson.IMG_PINTEREST;
         }
     } catch (e) { report('⚠️ 신규 메타 파싱 실패, 레거시 파싱 시도', 'warning'); }
 
@@ -1006,6 +1105,10 @@ ${langTag}`;
     finalHtml = finalHtml.replace(/\{\s*"IMG_\d+"[\s\S]*?\}/g, '');
     finalHtml = finalHtml.replace(/```json[\s\S]*?```/gi, '');
     finalHtml = finalHtml.replace(/^\s*text\s*$/gm, '');
+
+    // [MARKDOWN_TO_HTML] 마크다운 **강조** 문법을 HTML 태그로 변환시켜 깨짐 현상 방지
+    finalHtml = finalHtml.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
     finalHtml = finalHtml.trim();
 
     let finalTitle = target;
@@ -1038,11 +1141,51 @@ ${langTag}`;
         }
     }
 
-    finalHtml = finalHtml.replace(/\[\[IMG_\d+\]\]/gi, '').trim();
+    // === [IMG_PINTEREST] 처리 (2:3 수직 이미지 - 최상단 히든 썸네일) ===
+    let urlPin = '';
+    try {
+        const pinMeta = imgMetas['P'] || { mainTitle: target, bgPrompt: target + " premium vertical pinterest style infographic 2026" };
+        if (!pinMeta.mainTitle) pinMeta.mainTitle = target; // [TITLE_STABILITY] 영문 prompt가 제목으로 쓰이는 것 방지
+        urlPin = await genThumbnail(pinMeta, model, '2:3');
+
+        const pinHtml = `<div style='display:none;'><img src='${urlPin}' alt='Pinterest Optimized - ${target}'></div>\n`;
+        // 무조건 최상단에 히든으로 삽입 (기존 치환자는 제거)
+        finalHtml = pinHtml + finalHtml.replace(/\[\[IMG_PINTEREST\]\]/gi, '');
+    } catch (pinErr) {
+        report('⚠️ 핀터레스트 썸네일 생성 실패: ' + pinErr.message, 'warning');
+    }
+
+    // === [LINK_STABILITY] 메인글 하단에 서브글 링크 목록 자동 생성 (안전장치) ===
+    if (extraLinks.length > 0) {
+        const isKo = lang === 'ko';
+        const sectionTitle = isKo ? "🔗 함께 읽으면 좋은 관련 가이드" : "🔗 Recommended Related Guides";
+        let linkListHtml = `\n<div class='related-posts-box' style='margin-top:50px; padding:30px; background:rgba(99,102,241,0.05); border-left:5px solid #6366f1; border-radius:15px;'>`;
+        linkListHtml += `<h3 style='margin-top:0; color:#6366f1;'>${sectionTitle}</h3><ul style='list-style:none; padding:0; margin:0;'>`;
+
+        extraLinks.forEach(link => {
+            linkListHtml += `<li style='margin:15px 0; padding-bottom:10px; border-bottom:1px solid rgba(0,0,0,0.05);'>
+                <a href='${link.url}' style='text-decoration:none; font-weight:bold; color:#1e40af; display:block; transition:all 0.3s;'>
+                    • ${link.title} <span style='color:#6366f1; font-size:0.8em; margin-left:10px;'>기사 보기 →</span>
+                </a>
+            </li>`;
+        });
+        linkListHtml += `</ul></div>\n`;
+
+        // 본문 마지막에 관련 글 섹션 강제 결합
+        finalHtml += linkListHtml;
+    }
 
     // [CRITICAL FIX]: Remove redundant hardcoded disclaimer here because AI will generate it based on Master Guideline.
-    // This prevents double disclaimer issue.
-    const res = await blogger.posts.insert({ blogId: bId, requestBody: { title: finalTitle, content: STYLE + finalHtml + '</div>', published: pTime.toISOString() } });
+    const isFuture = pTime.getTime() > Date.now() + 60000;
+    const reqBody = {
+        title: finalTitle,
+        content: STYLE + finalHtml + '</div>',
+        published: pTime.toISOString()
+    };
+    // [SCHEDULE_STABILITY]: 시간이 미래라면 구글 블로그 API 스펙에 맞춰 명시적으로 SCHEDULED 상태를 던집니다.
+    if (isFuture) reqBody.status = 'SCHEDULED';
+
+    const res = await blogger.posts.insert({ blogId: bId, isDraft: false, requestBody: reqBody });
     report(`🖋️ [포스팅 성공]: "${finalTitle}"`, 'success');
     report(`🔗 [URL]: ${res.data.url}`);
     return { title: finalTitle, url: res.data.url };
@@ -1057,8 +1200,10 @@ async function run() {
     const blogger = google.blogger({ version: 'v3', auth });
 
     report(`⚙️ 설정을 로드했습니다. (언어: ${config.blog_lang}, 모드: ${config.post_mode})`);
+    report(`🚀 [TEST MODE]: daily_count(${config.daily_count}) 제한을 무시하고 즉시 실행합니다. (Unlimited Mode Enabled)`);
 
     report('🛡️ [Turbo Full-Mode]: 프리미엄 클러스터 구축 시작');
+
 
     let baseKeyword = config.pillar_topic || 'PC Hardware';
     const categories = {
@@ -1096,7 +1241,7 @@ async function run() {
         const pool = config.clusters || [];
 
         const selectionPrompt = `You are an elite trend analyst. 
-        Date: ${getKST().toISOString().split('T')[0]}
+        Date: ${getKSTDateString()}
         Category: ${currentCat.name}
         Persona: ${currentCat.persona}
         
@@ -1123,7 +1268,7 @@ async function run() {
     const personaTag = config.selected_persona ? `\n[SPECIFIC_PERSONA]: ${config.selected_persona}` : '';
 
     const clusterPrompt = `You are a 10-year veteran blog Google SEO expert specializing in Topic Clusters.${personaTag}
-    Today's date is ${getKST().toISOString().split('T')[0]}. 
+    Today's date is ${getKSTDateString()}. 
     Niche: '${baseKeyword}'
     
     ★ MISSION: Create 5 high-performing blog post titles (1 Pillar + 4 Spokes) in ${langName} that dominate Google Search.
@@ -1154,17 +1299,57 @@ async function run() {
     const pillarTitle = list[0]; const spokes = list.slice(1);
     const subLinks = [];
 
-    // 2단계: Spoke(서브 글) 먼저 작성 - 실제 URL 확보
-    for (let i = 0; i < spokes.length; i++) {
-        const pTime = getKST(); pTime.setMinutes(pTime.getMinutes() + (i + 1) * 2);
-        const sRes = await writeAndPost(model, spokes[i], config.blog_lang, blogger, config.blog_id, pTime, [], i + 1, 5, config.selected_persona);
-        if (sRes) subLinks.push(sRes);
-        await new Promise(r => setTimeout(r, 30000)); // 할당량 보호: 포스팅 간격을 30초로 확대
+    // [Time Optimization] 스케줄 기준 시간 설정 및 절대 예약 시간 체계 (UTC 기준)
+    let currentTime = new Date();
+    // [해결] 엔진 구동 시간을 넉넉히 감안하여, '무조건 첫 글부터 미래'로 지정되게 15분 뒤로 기본 세팅
+    currentTime.setMinutes(currentTime.getMinutes() + 15);
+
+    if (config.schedule_time) {
+        const [sh, sm] = config.schedule_time.split(':');
+        const kstOffsetMs = 9 * 3600000;
+        let nowKst = new Date(Date.now() + kstOffsetMs);
+        nowKst.setUTCHours(parseInt(sh), parseInt(sm), 0, 0); // KST 기준으로 시간 강제 맞춤
+        if (nowKst.getTime() < Date.now() + kstOffsetMs) {
+            nowKst.setUTCDate(nowKst.getUTCDate() + 1); // 지정 시간이 이미 지났다면 내일로 예약
+        }
+        currentTime = new Date(nowKst.getTime() - kstOffsetMs); // 다시 UTC 기준 절대 Date로 변환
     }
 
-    // 3단계: Pillar(메인 글) 마지막 작성 - 모든 서브글 링크 실제 주소로 연결
+    // 2단계: Spoke(서브 글) 먼저 작성 - 실제 URL 확보
+    for (let i = 0; i < spokes.length; i++) {
+        // [핵심] 각 글 발행 이후 간격: 최소 80분에서 최대 120분 사이 랜덤
+        if (config.random_delay) {
+            let delay = 0;
+            if (i > 0) {
+                delay = Math.floor(Math.random() * 41) + 80; // 80 ~ 120 랜덤
+                currentTime.setMinutes(currentTime.getMinutes() + delay);
+            }
+            report(`🎲 [Spoke ${i + 1}] ${delay === 0 ? '첫 글 (기본15분 대기)' : delay + '분 뒤'} 시간 지정: ${new Date(currentTime.getTime() + 9 * 3600000).toISOString().replace('T', ' ').substring(0, 16)} KST`);
+        } else {
+            // 랜덤 사용 안 할 시 20분 간격
+            if (i > 0) currentTime.setMinutes(currentTime.getMinutes() + 20);
+            report(`⏰ [Spoke ${i + 1}] 20분 간격 예약 지정시간: ${new Date(currentTime.getTime() + 9 * 3600000).toISOString().replace('T', ' ').substring(0, 16)} KST`);
+        }
+
+        const pTime = new Date(currentTime.getTime());
+        const sRes = await writeAndPost(model, spokes[i], config.blog_lang, blogger, config.blog_id, pTime, [], i + 1, 5, config.selected_persona);
+        if (sRes) subLinks.push(sRes);
+        await new Promise(r => setTimeout(r, 30000));
+    }
+
+    // 3단계: Pillar(메인 글) 마지막 작성
     report(`🎯 최종 메인 허브(Pillar) 글 작성: ${pillarTitle}`);
-    await writeAndPost(model, pillarTitle, config.blog_lang, blogger, config.blog_id, getKST(), subLinks, 5, 5, config.selected_persona);
+    if (config.random_delay) {
+        const finalDelay = Math.floor(Math.random() * 41) + 80; // 똑같이 80~120분 랜덤
+        currentTime.setMinutes(currentTime.getMinutes() + finalDelay);
+        report(`🎲 [Pillar] ${finalDelay}분 최종 지연 예약: ${new Date(currentTime.getTime() + 9 * 3600000).toISOString().replace('T', ' ').substring(0, 16)} KST`);
+    } else {
+        currentTime.setMinutes(currentTime.getMinutes() + 20);
+        report(`⏰ [Pillar] 최종 블로그 예약 지정시간: ${new Date(currentTime.getTime() + 9 * 3600000).toISOString().replace('T', ' ').substring(0, 16)} KST`);
+    }
+
+    const pillarTime = new Date(currentTime.getTime());
+    await writeAndPost(model, pillarTitle, config.blog_lang, blogger, config.blog_id, pillarTime, subLinks, 5, 5, config.selected_persona);
     report('🌈 프리미엄 클러스터 전략 완료!', 'success');
 }
 run().catch(e => { report(e.message, 'error'); process.exit(1); });
