@@ -625,6 +625,73 @@ SEO: h1 1개, h2 6~7개 키워드 포함, 리치 스니펫 노출 목표.
 6. **JSON 한 줄 출력**: content 내부에 물리적 줄바꿈 절대 금지.
 `;
 
+const MASTER_GUIDELINE_EN = `
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Vue Blog — Integrated Multi-Platform Blog Agent
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Follow these rules to generate HTML source code optimized for 
+Google Search, Blogspot, and WordPress.
+
+════════════════════════════════════════
+   PART 0 — Language & Priority (Absolute Rule)
+════════════════════════════════════════
+
+[GLOBAL LANGUAGE ROUTING & TRANSLATION]
+★ [LANGUAGE AXIS]: The **[TARGET_LANGUAGE]** specified at the bottom is the absolute directive.
+  1. If **[TARGET_LANGUAGE]: English**, you MUST write 100% in native-level English.
+  2. Even if research data is in another language, translate it perfectly into English.
+  3. All UI components (Table of Contents, Pro Tip, FAQ, etc.) and Metadata MUST be in English.
+
+════════════════════════════════════════
+  PART A — Core Philosophy
+════════════════════════════════════════
+
+① Less is More: Max 3-4 callout boxes. No consecutive boxes.
+② Precision: All figures based on research. Cite sources naturally.
+③ Authenticity: Avoid AI patterns. Use a human, irregular narrative style. Use 구어체/slang (don't, it's).
+④ Revenue First: Maximize stay time for AdSense optimization.
+
+════════════════════════════════════════
+  PART B — Output & Volume
+════════════════════════════════════════
+
+■ Length: 7,000 to 9,000+ characters (in the target language).
+  ★ [STRONG WARNING]: Do not use simple bulleted lists. Write long, detailed expert narratives (<p>) to ensure massive volume.
+
+■ Content Rules:
+  [1] Metadata: IMG_0~3 (JSON)
+  [2] HTML: No <h1> in body. Start with <h2>.
+  [3] Placeholders: Use [[IMG_0]], [[IMG_1]], [[IMG_2]], [[IMG_3]].
+  [4] No Numbers in Titles: Never use "1.", "2." in H2/H3 tags. Use smooth text titles.
+  [5] Ban AI Cliches: Delete "As an expert...", "In today's post...", "In conclusion", "Don't forget to comment".
+  [6] Zero-AI Conclusion: Do not ask questions at the end. Provide a sharp, expert closing thought in the closing-box.
+  [7] Specific Episodes: Use specific times, places, and situations (e.g., "In the summer of 2024 at a resort in Maldives...") to prove human experience.
+  [8] Sentence Variation: Mix long complex sentences with short, punchy ones ("It was a disaster.", "Remember this.").
+  [9] Realistic Grit: Don't be overly positive. Include 1-2 cynical/honest criticisms (e.g., "It was a total waste of money.").
+
+════════════════════════════════════════
+  PART D — Zero-AI Signature
+════════════════════════════════════════
+  [1] Ban Transitions: NEVER use "In addition", "Furthermore", "Moreover", "Consequently". Connect sentences naturally.
+  [2] Vivid Detail: Instead of "check equipment regularly", say "dust in the corner of your studio is slowing your fan by 15%".
+
+════════════════════════════════════════
+  PART J — E-E-A-T Quality Engine
+════════════════════════════════════════
+
+[Experience]: One personal story of failure or regret is MANDATORY.
+[Expertise]: One comparison table is MANDATORY.
+[Trustworthiness]: Disclaimer at the bottom is MANDATORY.
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# [VUE STUDIO ULTIMATE ADD-ON: ADDITIONAL RULES]
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+4. TOC: Place after intro. IDs for all <h2> must be in English.
+5. Boxes: Place boxes at the end of sections, before the next H2.
+6. Disclaimer: Mandatory labels like "Disclaimer" at the very bottom.
+`;
+
 const STYLE = `
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700&display=swap');
@@ -826,17 +893,15 @@ async function genImg(prompt, model, idx, ratio = '16:9') {
             report(`   ㄴ [Stock] GA 안전 모드: 키워드 기반 이미지 사용 (${keywords || 'ai'})`);
         }
 
-        // 3. ImgBB Upload (영구 보관 시도)
+        // 3. Image Hosting Service (ImgBB + Multi-rotation + Fallback)
         try {
             const res = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 15000, headers: { 'User-Agent': 'Mozilla/5.0' } });
             if (res.status === 200) {
-                const form = new FormData();
-                form.append('image', Buffer.from(res.data).toString('base64'));
-                const ir = await axios.post('https://api.imgbb.com/1/upload?key=' + process.env.IMGBB_API_KEY, form, { headers: form.getHeaders(), timeout: 15000 });
-                return ir.data.data.url;
+                const uploadedUrl = await uploadToImgHost(Buffer.from(res.data).toString('base64'));
+                return uploadedUrl;
             }
         } catch (imgbbErr) {
-            report(`   ㄴ [ImgBB] 저장 실패 (한도초과 등): 원본 링크 직접 사용`, 'warning');
+            report(`   ㄴ [ImageHost] 영구 저장 실패 (한도초과 등): 원본 링크 직접 사용`, 'warning');
             return imageUrl;
         }
         return imageUrl;
@@ -845,6 +910,34 @@ async function genImg(prompt, model, idx, ratio = '16:9') {
         const seed = Math.floor(Math.random() * 9999);
         return `https://picsum.photos/seed/${seed}/1080/720`;
     }
+}
+
+/**
+ * [UTILITY] 멀티 이미지 호스팅 및 키 로테이션 시스템
+ * ImgBB 한도 초과 시 다음 키로 자동 전환하거나 대체 호스트(FreeImage.host)를 사용합니다.
+ */
+async function uploadToImgHost(base64Data) {
+    const imgbbKeys = (process.env.IMGBB_API_KEY || '').split(',').map(k => k.trim()).filter(k => k);
+    const freeimageKey = (process.env.FREEIMAGE_API_KEY || '').trim();
+
+    const hosts = [];
+    imgbbKeys.forEach(k => hosts.push({ name: 'ImgBB', key: k, url: 'https://api.imgbb.com/1/upload' }));
+    if (freeimageKey) hosts.push({ name: 'FreeImage', key: freeimageKey, url: 'https://freeimage.host/api/1/upload/' });
+
+    if (hosts.length === 0) throw new Error("이미지 호스팅 키(IMGBB_API_KEY)가 없습니다.");
+
+    for (const host of hosts) {
+        try {
+            const form = new FormData();
+            form.append('image', base64Data);
+            const ir = await axios.post(`${host.url}?key=${host.key}`, form, { headers: form.getHeaders(), timeout: 20000 });
+            if (ir.data?.data?.url) return ir.data.data.url;
+        } catch (e) {
+            const errRes = e.response?.data?.error?.message || e.message;
+            report(`   ㄴ [${host.name}] 업로드 차단됨 (${errRes.substring(0, 30)}): 다음 경로 시도...`, 'warning');
+        }
+    }
+    throw new Error("모든 이미지 호스팅 시도가 실패했습니다.");
 }
 
 async function genThumbnail(meta, model, ratio = '16:9') {
@@ -922,12 +1015,11 @@ async function genThumbnail(meta, model, ratio = '16:9') {
         ctx.font = `bold 28px "${activeFont}", sans-serif`;
         ctx.fillText('designed by smileseon', w / 2, h * 0.9);
 
-        const form = new FormData();
-        form.append('image', cv.toBuffer('image/jpeg').toString('base64'));
-        const ir = await axios.post('https://api.imgbb.com/1/upload?key=' + process.env.IMGBB_API_KEY, form, { headers: form.getHeaders(), timeout: 10000 });
-        return ir.data.data.url;
+        // [IMAGE_HOST_ROTATION] 통합 업로드 로직 사용
+        const uploadedUrl = await uploadToImgHost(cv.toBuffer('image/jpeg').toString('base64'));
+        return uploadedUrl;
     } catch (e) {
-        report(`⚠️ 썸네일 합성 실패 (${e.message}): 원본 이미지로 대체합니다.`, 'warning');
+        report(`⚠️ 썸네일 합성/업로드 실패 (${e.message}): 원본 이미지로 대체합니다.`, 'warning');
         return await genImg(meta.mainTitle || meta.prompt, model, 0, ratio);
     }
 }
@@ -974,35 +1066,35 @@ async function writeAndPost(model, target, lang, blogger, bId, pTime, extraLinks
         ? { thumb: "썸네일용 매력적인 짧은 한글 제목", pin: "핀터레스트용 세로형 매력적인 한글 제목" }
         : { thumb: "Short, eye-catching English title for thumbnail", pin: "Viral English title for Pinterest vertical pin" };
 
-    // MISSION 분량 확보를 위한 강력한 지침 추가
-    const m1Prompt = MASTER_GUIDELINE + `
+    // MASTER 가이드라인 언어별 선택 (영문 블로그 시 한국어 지침 0%로 제거)
+    const baseGuideline = lang === 'ko' ? MASTER_GUIDELINE : MASTER_GUIDELINE_EN;
+
+    // MISSION 분량 확보를 위한 강력한 지침 추가 (3중 언어 잠금)
+    const m1Prompt = `[CRITICAL_LANGUAGE_LOCK]: YOU MUST WRITE EVERYTHING IN ${lang === 'ko' ? 'KOREAN (한국어)' : 'ENGLISH'}.
+    ${lang === 'ko' ? '★ 본 블로그는 한국어 전용입니다. 모든 내용을 원어민 수준의 한국어로 작성하세요.' : '★ This blog is for English readers only. Write everything in native-level English.'}
+    ${lang === 'ko' ? '★ 데이터가 영어더라도 반드시 한국어로 번역하고 요약하여 집필하세요.' : '★ Synthesis results in English always.'}
+    
+    ` + baseGuideline + `
 [MISSION: FULL POST GENERATION] 
-정확히 아래 포맷에 맞춰서 한 번에 모든 글을 작성해야 합니다. 절대 포맷을 어기지 마세요.
-전체 본문은 반드시 4~8개의 메인 섹션(H2)으로 풍성하게 구성하세요.
-전체 글 분량은 6,000자~8,000자 이상 확보하도록 상세하게 풀어 쓰세요. 특히, 짧게 넘어가지 말고 본문의 섹션별 설명을 매우 길게 늘려야 합니다.
+${lang === 'ko' ? '★ 반드시 한국어로 작성하세요! (MUST WRITE IN KOREAN)' : '★ MUST WRITE IN ENGLISH'}
+${lang === 'ko' ? '정확히 아래 포맷에 맞춰서 한 번에 모든 글을 작성해야 합니다. 전체 본문은 반드시 4~8개의 메인 섹션(H2)으로 풍성하게 구성하세요. 분량은 6,000자~8,000자 이상 확보하세요.' : 'Follow the format below exactly and write 4-8 sections. Length 6,000 to 8,000+ characters.'}
 
 [필수 디자인 컴포넌트 - 반드시 본문에 포함하세요]:
 ★ 배치 전략:
     - 글이 지루해지지 않도록, H2 텍스트가 2개째 등장하는 타이밍마다 삽입하여 독자의 시선을 적절하게 환기하세요.
     - **[Time Awareness]**: Today's date is ${getKSTDateString()}. Always write based on the latest available information as of today. If referencing years, focus on the current year and future trends.
 
-(A) 인사이트 박스 → <div class='insight-box'><strong>💡 Key Insight</strong><br>핵심 포인트 내용</div> — 최소 2개
-(B) 전문가 꿀팁 → <div class='tip-box'><strong>💡 Smileseon's Pro Tip</strong><br>꿀팁 내용</div> — 최소 2개
+(A) 인사이트 박스 → <div class='insight-box'><strong>💡 ${lang === 'ko' ? '핵심 인사이트' : 'Key Insight'}</strong><br>${lang === 'ko' ? '핵심 포인트 내용' : 'Core insight content'}</div>
+(B) 전문가 꿀팁 → <div class='tip-box'><strong>💡 ${lang === 'ko' ? "스마일선의 Pro Tip" : "Smileseon's Pro Tip"}</strong><br>${lang === 'ko' ? '꿀팁 내용' : 'Pro tip details'}</div>
 (C) 면책 조항 (Disclaimer): 반드시 글의 최하단에 위치시키고 레이블을 강조하세요.
-(D) 치명적 주의 → <div class='warn-box'><strong>🚨 Critical Warning</strong><br>주의 내용</div> — 최소 1개
-(E) 신뢰 데이터 → <div class='data-box'><strong>📊 Fact Check</strong><br>팩트 체크 내용</div> — 최소 2개
-(F) 마무리 박스 → <div class='closing-box'><h2>최종 마무리</h2><p>핵심 요약</p></div> — 글 맨 마지막에 반드시 1개
-(G) 각 섹션에 가능하면 <table> 포함 (4열x4행 이상의 비교 데이터)
-(H) FAQ 섹션에 최소 8~10개의 Q&A 포함
+(D) 치명적 주의 → <div class='warn-box'><strong>🚨 ${lang === 'ko' ? '치명적 주의' : 'Critical Warning'}</strong><br>${lang === 'ko' ? '주의 내용' : 'Critical warning details'}</div>
+(E) 신뢰 데이터 → <div class='data-box'><strong>📊 ${lang === 'ko' ? '팩트 체크' : 'Fact Check'}</strong><br>${lang === 'ko' ? '팩트 체크 내용' : 'Fact check details'}</div>
+(F) 마무리 박스 → <div class='closing-box'><h2>${lang === 'ko' ? '최종 마무리' : 'Final Conclusion'}</h2><p>${lang === 'ko' ? '핵심 요약' : 'Core summary'}</p></div>
 
 [META_DATA_START]
 {
-  "IMG_0": { "mainTitle": "${metaTitles.thumb}", "bgPrompt": "썸네일 배경 이미지 묘사 영문 프롬프트" },
-  "IMG_1": { "prompt": "본문 첫번째 이미지 묘사 영문 프롬프트" },
-  "IMG_2": { "prompt": "본문 두번째 이미지 묘사 영문 프롬프트" },
-  "IMG_3": { "prompt": "본문 세번째 이미지 묘사 영문 프롬프트" },
-  "IMG_4": { "prompt": "본문 네번째 이미지 묘사 영문 프롬프트" },
-  "IMG_PINTEREST": { "mainTitle": "${metaTitles.pin}", "prompt": "Pinterest 전용 세로형(2:3) 고퀄리티 이미지 묘사 영문 프롬프트" }
+  "IMG_0": { "mainTitle": "${metaTitles.thumb}", "bgPrompt": "English prompt for thumbnail" },
+  "IMG_PINTEREST": { "mainTitle": "${metaTitles.pin}", "prompt": "English prompt for Pinterest" }
 }
 [META_DATA_END]
 
@@ -1010,36 +1102,38 @@ async function writeAndPost(model, target, lang, blogger, bId, pTime, extraLinks
 [CONTENT_START]
 ${h1Instruction}
 <div class='toc-box'>
-  <h3>Table of Contents</h3>
+  <h3>${lang === 'ko' ? '목차' : 'Table of Contents'}</h3>
   <ul>
-    <li><a href='#section-1'>첫번째 섹션 제목</a></li>
-    <li><a href='#section-2'>두번째 섹션 제목</a></li>
+    <li><a href='#section-1'>${lang === 'ko' ? '첫번째 섹션 제목' : 'First Section Title'}</a></li>
+    <li><a href='#section-2'>${lang === 'ko' ? '두번째 섹션 제목' : 'Second Section Title'}</a></li>
   </ul>
 </div>
-<h2 id='section-1'>첫번째 섹션</h2>
-<p>본문 내용...</p>
-<div class='insight-box'><strong>💡 Key Insight</strong><br>인사이트 내용</div>
+<h2 id='section-1'>${lang === 'ko' ? '첫번째 섹션' : 'First Section'}</h2>
+<p>${lang === 'ko' ? '본문 내용...' : 'Content goes here...'}</p>
+<div class='insight-box'><strong>💡 ${lang === 'ko' ? '핵심 인사이트' : 'Key Insight'}</strong><br>${lang === 'ko' ? '인사이트 내용' : 'Insight details'}</div>
 [[IMG_1]]
-<h2 id='section-2'>두번째 섹션</h2>
-<p>본문 내용...</p>
-<div class='tip-box'><strong>💡 Smileseon's Pro Tip</strong><br>꿀팁 내용</div>
+<h2 id='section-2'>${lang === 'ko' ? '두번째 섹션' : 'Second Section'}</h2>
+<p>${lang === 'ko' ? '본문 내용...' : 'Content goes here...'}</p>
+<div class='tip-box'><strong>💡 ${lang === 'ko' ? '전문가 꿀팁' : "Smileseon's Pro Tip"}</strong><br>${lang === 'ko' ? '꿀팁 내용' : 'Tip details'}</div>
 [[IMG_2]]
-<h2>세번째 섹션</h2>
-<p>본문 내용...</p>
-<div class='data-box'><strong>📊 Fact Check</strong><br>데이터 내용</div>
+<h2>${lang === 'ko' ? '세번째 섹션' : 'Third Section'}</h2>
+<p>${lang === 'ko' ? '본문 내용...' : 'Content goes here...'}</p>
+<div class='data-box'><strong>📊 ${lang === 'ko' ? '팩트 체크' : 'Fact Check'}</strong><br>${lang === 'ko' ? '데이터 내용' : 'Data details'}</div>
 [[IMG_3]]
-<h2>네번째 섹션</h2>
-<p>본문 내용...</p>
-<div class='warn-box'><strong>🚨 Critical Warning</strong><br>주의 내용</div>
+<h2>${lang === 'ko' ? '네번째 섹션' : 'Fourth Section'}</h2>
+<p>${lang === 'ko' ? '본문 내용...' : 'Content goes here...'}</p>
+<div class='warn-box'><strong>🚨 ${lang === 'ko' ? '치명적 주의' : 'Critical Warning'}</strong><br>${lang === 'ko' ? '주의 내용' : 'Warning details'}</div>
 [[IMG_4]]
-... 최소 4개에서 최대 8개까지 섹션을 풍성하게 작성하세요. (8~10개의 FAQ, closing-box 마무리 포함)
-<div class='closing-box'><h2>최종 마무리</h2><p>핵심 요약</p></div>
+... ${lang === 'ko' ? '최소 4개에서 최대 8개까지 섹션을 풍성하게 작성하세요. (8~10개의 FAQ, closing-box 마무리 포함)' : 'Write at least 4 to 8 sections. (Include 8-10 FAQs, closing-box)'}
+<div class='closing-box'><h2>${lang === 'ko' ? '최종 마무리' : 'Final Conclusion'}</h2><p>${lang === 'ko' ? '핵심 요약' : 'Core summary'}</p></div>
 [CONTENT_END]
 
 ★ 경고: 본문 내에 이미지 삽입부에는 절대로 <img src=...> 태그를 쓰지 말고, 오직 [[IMG_1]], [[IMG_2]], [[IMG_3]] 과 같은 치환자만 적으세요.
 ${target}
 ${searchData}
 ${pillarContext}
+
+${lang === 'ko' ? '[최종 언어 검증]: 당신은 방금 한국어 블로그를 작성했습니다. 반드시 한국어로만 출력하세요.' : '[FINAL_LANGUAGE_CHECK]: YOU MUST OUTPUT IN ENGLISH ONLY.'}
 ${langTag}`;
 
     const m1 = await callAI(model, m1Prompt);
@@ -1196,27 +1290,29 @@ async function run() {
     auth.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
     const blogger = google.blogger({ version: 'v3', auth });
 
+    const isKo = config.blog_lang === 'ko';
     report(`⚙️ 설정을 로드했습니다. (언어: ${config.blog_lang}, 모드: ${config.post_mode})`);
-    report(`🚀 [TEST MODE]: daily_count(${config.daily_count}) 제한을 무시하고 즉시 실행합니다. (Unlimited Mode Enabled)`);
 
+    // [LOCALIZATION_FIX]: 카테고리 정보 현지화
+    const categories = {
+        "1": { name: isKo ? "PC 정비 및 유지보수" : "PC IT Support", query: "PC repair 2026", persona: isKo ? "15년 경력의 베테랑 PC 정비사" : "Veteran PC Tech" },
+        "2": { name: isKo ? "최신 하드웨어 및 부품" : "Latest Hardware", query: "hardware news 2026", persona: isKo ? "하드웨어 전문 리뷰어" : "Hardware Reviewer" },
+        "3": { name: isKo ? "게이밍 및 주변기기" : "Gaming Gear", query: "best gaming gear 2026", persona: isKo ? "프로게이머 게이밍 전문가" : "Gaming Specialist" },
+        "4": { name: isKo ? "AI 및 미래 기술" : "AI & Future Tech", query: "future AI 2026", persona: isKo ? "AI 기술 전략가" : "AI Strategist" },
+        "5": { name: isKo ? "코딩 및 소프트웨어" : "Coding & Software", query: "coding trends 2026", persona: isKo ? "시니어 엔지니어" : "Senior Engineer" },
+        "6": { name: isKo ? "요리 및 레시피" : "Cooking & Recipes", query: "trending recipes 2026", persona: isKo ? "요리 연구가" : "Culinary Researcher" },
+        "7": { name: isKo ? "패션 및 뷰티" : "Fashion & Beauty", query: "fashion news 2026", persona: isKo ? "패션 에디터" : "Fashion Editor" },
+        "8": { name: isKo ? "건강 및 의학" : "Health & Medical", query: "health tips 2026", persona: isKo ? "헬스 케어 전문가" : "Health Advisor" },
+        "9": { name: isKo ? "글로벌 뉴스 및 이슈" : "Global News", query: "world issues 2026", persona: isKo ? "시사 분석가" : "Issues Analyst" },
+        "10": { name: isKo ? "금융 및 주식" : "Finance & Stock", query: "stock market 2026", persona: isKo ? "투자 칼럼니스트" : "Investment Columnist" },
+        "11": { name: isKo ? "여행 및 어드벤처" : "Travel & Adventure", query: "travel destinations 2026", persona: isKo ? "탐험 작가" : "Travel Explorer" },
+        "12": { name: isKo ? "인테리어 및 디자인" : "Home & Interior", query: "home interior 2026", persona: isKo ? "공간 디자이너" : "Home Interior Designer" }
+    };
+
+    report(`🚀 [TEST MODE]: daily_count(${config.daily_count}) 제한을 무시하고 즉시 실행합니다. (Unlimited Mode Enabled)`);
     report('🛡️ [Turbo Full-Mode]: 프리미엄 클러스터 구축 시작');
 
-
     let baseKeyword = config.pillar_topic || 'PC Hardware';
-    const categories = {
-        "1": { name: "PC Repair & Maintenance", query: "PC repair maintenance tips guide 2026", persona: "15년 경력의 베테랑 PC 정비사" },
-        "2": { name: "Latest Hardware & Parts", query: "latest PC components hardware news 2026", persona: "하드웨어 벤치마크 전문 리뷰어" },
-        "3": { name: "Gaming & Peripherals", query: "best gaming gear peripherals trends 2026", persona: "프로게이머 출신의 게이밍 기어 전문가" },
-        "4": { name: "AI & Future Technology", query: "future AI technology trends 2026", persona: "실리콘밸리 기술 전략가이자 미래학자" },
-        "5": { name: "Coding & Software", query: "programming software development trends 2026", persona: "풀스택 시니어 소프트웨어 엔지니어" },
-        "6": { name: "Cooking & Recipes", query: "trending food recipes cooking tips 2026", persona: "미쉐린 가이드 스타일의 요리 연구가" },
-        "7": { name: "Fashion & Beauty", query: "latest fashion beauty style trends 2026", persona: "글로벌 패션 에디터이자 스타일 디렉터" },
-        "8": { name: "Health & Medical", query: "health wellness medical insights 2026", persona: "전문 헬스 케어 어드바이저" },
-        "9": { name: "Global News & Issues", query: "global news world issue summary 2026", persona: "국제 정세 전문 시사 평론가" },
-        "10": { name: "Finance & Stock", query: "finance stock market investment trends 2026", persona: "월스트리트 출신 투자 칼럼니스트" },
-        "11": { name: "Travel & Adventure", query: "world travel destination adventure 2026", persona: "럭셔리 트래블 작가이자 탐험가" },
-        "12": { name: "Home & Interior", query: "modern home interior design furniture 2026", persona: "하이엔드 공간 디자이너" }
-    };
 
     if (baseKeyword === '자동생성') {
         const targetCats = config.target_categories || ["1"];
@@ -1264,21 +1360,39 @@ async function run() {
     const langName = config.blog_lang === 'ko' ? 'Korean' : 'English';
     const personaTag = config.selected_persona ? `\n[SPECIFIC_PERSONA]: ${config.selected_persona}` : '';
 
-    const clusterPrompt = `You are a 10-year veteran blog Google SEO expert specializing in Topic Clusters.${personaTag}
+    const clusterPrompt = config.blog_lang === 'ko'
+        ? `당신은 토픽 클러스터(Topic Clusters)를 전문으로 하는 10년 경력의 구글 SEO 전문가입니다.${personaTag}
+    오늘 날짜는 ${getKSTDateString()}입니다.
+    주제 필드: '${baseKeyword}'
+    
+    ★ 미션: 구글 검색을 장악할 수 있는 고성능 블로그 포스팅 제목 5개(Pillar 1개 + Spoke 4개)를 한국어로 생성하세요.
+    
+    [중요: 페르소나 목소리]:
+    - 위에 정의된 [SPECIFIC_PERSONA]의 전문 용어, 말투, 관점을 사용하세요.
+    - 엔지니어라면 기술적이고 정밀하게, 요리사라면 감각적이고 권위 있게 작성하세요.
+    
+    [적용할 SEO 전략]:
+    1. **최신성 (2026)**: '2026'년을 자연스럽게 포함하여 신선함을 유도하세요.
+    2. **제목 다양성**: 모든 제목에 동일한 구조를 사용하지 마세요. 궁금증 유발, 전문가 의견, 질문형, 사례 연구 등을 섞으세요.
+    3. **강력한 혜택**: 해당 페르소나에 걸맞은 구체적이고 체감되는 이득을 언급하세요.
+    4. **상투적 표현 금지**: "완벽 가이드" 같은 식상한 표현 대신 페르소나의 권위가 느껴지는 독특한 훅을 사용하세요.
+    5. **번호 사용 금지**: 제목에 "1.", "2." 같은 숫자를 절대 붙이지 마세요.
+    
+    출력은 오직 5개의 제목이 담긴 JSON 배열 문자열만 하세요.`
+        : `You are a 10-year veteran blog Google SEO expert specializing in Topic Clusters.${personaTag}
     Today's date is ${getKSTDateString()}. 
     Niche: '${baseKeyword}'
     
-    ★ MISSION: Create 5 high-performing blog post titles (1 Pillar + 4 Spokes) in ${langName} that dominate Google Search.
+    ★ MISSION: Create 5 high-performing blog post titles (1 Pillar + 4 Spokes) in English that dominate Google Search.
     
     [IMPORTANT: PERSONA VOICE]:
     - Use the vocabulary, tone, and perspective of the [SPECIFIC_PERSONA] defined above.
-    - If the persona is an engineer, be technical and precise. If a chef, be sensory and authoritative.
     
     [SEO STRATEGIES TO APPLY]:
-    1. **Recency (2026)**: Include '2026' naturally to trigger freshness.
-    2. **Title Variety**: **DO NOT** use the same structure for all titles. Mix styles: Curiosity, Expert Opinion, Question-Based, Case Study, and 1-2 occasional Listicles.
-    3. **Powerful Benefits**: Mention a specific, visceral benefit suited to your persona.
-    4. **No Generic Fillers**: Avoid repetitive hooks like "Ultimate Guide". Use unique, persona-driven authority hooks.
+    1. **Recency (2026)**: Include '2026' naturally.
+    2. **Title Variety**: Mix styles (Curiosity, Expert Opinion, Question-Based, Case Study).
+    3. **Powerful Benefits**: Mention specific benefits.
+    4. **No Generic Fillers**: Avoid "Ultimate Guide".
     5. **No Numbered Heading**: NEVER use "1.", "2." in titles.
     
     Output ONLY a JSON array of 5 titles string.`;
