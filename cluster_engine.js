@@ -921,20 +921,31 @@ async function uploadToImgHost(base64Data) {
     const freeimageKey = (process.env.FREEIMAGE_API_KEY || '').trim();
 
     const hosts = [];
-    imgbbKeys.forEach(k => hosts.push({ name: 'ImgBB', key: k, url: 'https://api.imgbb.com/1/upload' }));
-    if (freeimageKey) hosts.push({ name: 'FreeImage', key: freeimageKey, url: 'https://freeimage.host/api/1/upload/' });
+    imgbbKeys.forEach(k => hosts.push({ name: 'ImgBB', key: k, url: 'https://api.imgbb.com/1/upload', param: 'image' }));
+    if (freeimageKey) hosts.push({ name: 'FreeImage', key: freeimageKey, url: 'https://freeimage.host/api/1/upload/', param: 'source' });
 
     if (hosts.length === 0) throw new Error("이미지 호스팅 키(IMGBB_API_KEY)가 없습니다.");
 
     for (const host of hosts) {
         try {
             const form = new FormData();
-            form.append('image', base64Data);
-            const ir = await axios.post(`${host.url}?key=${host.key}`, form, { headers: form.getHeaders(), timeout: 20000 });
-            if (ir.data?.data?.url) return ir.data.data.url;
+            // FreeImage.host 공식 가이드: source는 바디에, key/action 등은 URL 또는 바디에 가능하지만 POST 선호
+            form.append(host.param, base64Data);
+
+            let apiUrl = `${host.url}?key=${host.key}`;
+            if (host.name === 'FreeImage') apiUrl += '&action=upload&format=json';
+
+            const ir = await axios.post(apiUrl, form, {
+                headers: form.getHeaders(),
+                timeout: 30000 // 업로드 시간 고려하여 30초로 확대
+            });
+
+            // 응답 구조 확인 (이미지 URL 추출)
+            const resultUrl = ir.data?.data?.url || ir.data?.image?.url;
+            if (resultUrl) return resultUrl;
         } catch (e) {
             const errRes = e.response?.data?.error?.message || e.message;
-            report(`   ㄴ [${host.name}] 업로드 차단됨 (${errRes.substring(0, 30)}): 다음 경로 시도...`, 'warning');
+            report(`   ㄴ [${host.name}] 업로드 실패 (${errRes.substring(0, 35)}): 다음 경로 시도...`, 'warning');
         }
     }
     throw new Error("모든 이미지 호스팅 시도가 실패했습니다.");
