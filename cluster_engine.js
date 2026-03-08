@@ -793,7 +793,7 @@ async function genImg(prompt, model, idx, ratio = '16:9') {
         // 1. Kie.ai (Premium Image Generation)
         if (kieKey && kieKey.length > 5) {
             try {
-                report(`   ㄴ [Kie.ai] z-image 호출 중 (이미지 생성)...`);
+                report(`   ㄴ [Kie.ai] z-image 호출 중...`);
                 const cr = await axios.post('https://api.kie.ai/api/v1/jobs/createTask', {
                     model: 'z-image',
                     input: { prompt: revised + ', high-end, editorial photography, 8k', aspect_ratio: ratio }
@@ -814,60 +814,36 @@ async function genImg(prompt, model, idx, ratio = '16:9') {
                         if (state === 'fail' || state === 'failed') break;
                     }
                 }
-            } catch (e) { report(`   ㄴ [Kie.ai] 중단 (${e.message}): 다음 엔진 전환`, 'warning'); }
+            } catch (e) { report(`   ㄴ [Kie.ai] 중단 (${e.message}): 차선책(Stock Photo)으로 전환`, 'warning'); }
         }
 
-        // 2. Pollinations.ai (FLUX Fallback)
+        // 2. [GA Friendly] Keyword-based Stock Photo Fallback (Pollinations 제거)
         if (!imageUrl) {
             const [w, h] = ratio === '2:3' ? [800, 1200] : [1080, 720];
-            imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(revised)}?width=${w}&height=${h}&seed=${Math.floor(Math.random() * 99999)}&nologo=true&enhance=true`;
+            // 키워드 추출 (최대한 주제에 근접하게)
+            const keywords = prompt.replace(/[^a-zA-Z\s]/g, '').split(' ').filter(v => v.length > 3).slice(0, 3).join(',');
+            imageUrl = `https://loremflickr.com/${w}/${h}/${keywords || 'technology,ai'}?lock=${Math.floor(Math.random() * 1000) + idx}`;
+            report(`   ㄴ [Stock] GA 안전 모드: 키워드 기반 이미지 사용 (${keywords || 'ai'})`);
         }
 
-        // 3. ImgBB Upload (영구 보관)
-        const res = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 15000, headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' } });
-        if (res.status !== 200) throw new Error("Image download failed");
-
-        const form = new FormData();
-        form.append('image', Buffer.from(res.data).toString('base64'));
-        const ir = await axios.post('https://api.imgbb.com/1/upload?key=' + process.env.IMGBB_API_KEY, form, { headers: form.getHeaders() });
-        return ir.data.data.url;
-    } catch (e) {
+        // 3. ImgBB Upload (영구 보관 시도)
         try {
-            // Level 2 Fallback: High quality stock photo
-            const seed = prompt.replace(/[^a-zA-Z]/g, '').substring(0, 10) + idx;
-            const fallbackUrl = `https://picsum.photos/seed/${seed}/1080/720`;
-            const fbRes = await axios.get(fallbackUrl, { responseType: 'arraybuffer', timeout: 5000 });
-            const form = new FormData();
-            form.append('image', Buffer.from(fbRes.data).toString('base64'));
-            const ir = await axios.post('https://api.imgbb.com/1/upload?key=' + process.env.IMGBB_API_KEY, form, { headers: form.getHeaders() });
-            return ir.data.data.url;
-        } catch (fallbackErr) {
-            // Level 3 Fallback: Canvas Error Image
-            try {
-                const cv = createCanvas(1080, 720);
-                const ctx = cv.getContext('2d');
-                const h = Math.floor(Math.random() * 360);
-                const grad = ctx.createLinearGradient(0, 0, 1080, 720);
-                grad.addColorStop(0, `hsl(${h}, 70%, 40%)`);
-                grad.addColorStop(1, `hsl(${h + 60}, 70%, 20%)`);
-                ctx.fillStyle = grad;
-                ctx.fillRect(0, 0, 1080, 720);
-
-                ctx.fillStyle = 'rgba(255,255,255,0.05)';
-                for (let i = 0; i < 8; i++) {
-                    ctx.beginPath();
-                    ctx.arc(Math.random() * 1080, Math.random() * 720, Math.random() * 300 + 100, 0, Math.PI * 2);
-                    ctx.fill();
-                }
-                ctx.fillStyle = '#fff'; ctx.textAlign = 'center';
-                ctx.font = 'bold 45px sans-serif';
-                ctx.fillText('Dynamic Display Image', 540, 360);
+            const res = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 15000, headers: { 'User-Agent': 'Mozilla/5.0' } });
+            if (res.status === 200) {
                 const form = new FormData();
-                form.append('image', cv.toBuffer('image/jpeg').toString('base64'));
-                const ir = await axios.post('https://api.imgbb.com/1/upload?key=' + process.env.IMGBB_API_KEY, form, { headers: form.getHeaders() });
+                form.append('image', Buffer.from(res.data).toString('base64'));
+                const ir = await axios.post('https://api.imgbb.com/1/upload?key=' + process.env.IMGBB_API_KEY, form, { headers: form.getHeaders(), timeout: 15000 });
                 return ir.data.data.url;
-            } catch (e) { return ''; }
+            }
+        } catch (imgbbErr) {
+            report(`   ㄴ [ImgBB] 저장 실패 (한도초과 등): 원본 링크 직접 사용`, 'warning');
+            return imageUrl;
         }
+        return imageUrl;
+    } catch (e) {
+        // Final Fallback: Random Tech Image
+        const seed = Math.floor(Math.random() * 9999);
+        return `https://picsum.photos/seed/${seed}/1080/720`;
     }
 }
 
@@ -948,9 +924,10 @@ async function genThumbnail(meta, model, ratio = '16:9') {
 
         const form = new FormData();
         form.append('image', cv.toBuffer('image/jpeg').toString('base64'));
-        const ir = await axios.post('https://api.imgbb.com/1/upload?key=' + process.env.IMGBB_API_KEY, form, { headers: form.getHeaders() });
+        const ir = await axios.post('https://api.imgbb.com/1/upload?key=' + process.env.IMGBB_API_KEY, form, { headers: form.getHeaders(), timeout: 10000 });
         return ir.data.data.url;
     } catch (e) {
+        report(`⚠️ 썸네일 합성 실패 (${e.message}): 원본 이미지로 대체합니다.`, 'warning');
         return await genImg(meta.mainTitle || meta.prompt, model, 0, ratio);
     }
 }
@@ -965,15 +942,21 @@ async function writeAndPost(model, target, lang, blogger, bId, pTime, extraLinks
     if (extraLinks.length > 0) {
         const isKo = lang === 'ko';
         const btnText = isKo ? "▶ 관련 가이드 자세히 보기" : "▶ Read More Guide";
-        const links = extraLinks.map((l, idx) => `[서브글 ${idx + 1}] 제목: ${l.title}\n[복사해서 본문에 넣을 HTML 코드]:\n<div style='margin: 40px 0;'><p style='font-size:16px; font-weight:700; color:#334155;'>🎯 Related Deep Dive:</p><a href='${l.url}' class='cluster-btn'>${l.title} ${btnText}</a></div>`).join('\n\n');
+        const links = extraLinks.map((l, idx) => `[서브글 ${idx + 1}] 제목: ${l.title}\n[복사해서 본문에 넣을 HTML 코드]:\n<div style='margin: 40px 0; border: 1px solid #e5e7eb; border-radius:12px; padding:20px;'><h4 style='margin-top:0; color:#1e293b; font-size:18px;'>📍 Related Topic: ${l.title}</h4><p style='font-size:15px; color:#475569; line-height:1.6;'>여기에 [서브글 ${idx + 1}]의 핵심 내용을 SEO를 고려하여 3~4줄로 흥미진진하게 요약해서 독자의 클릭을 유도하는 글을 직접 작성하세요.</p><a href='${l.url}' class='cluster-btn'>${btnText}</a></div>`).join('\n\n');
 
         const contextPrompt = isKo
             ? `[INTERNAL_LINK_PUNITIVE_MISSION]: 이 포스팅은 메인 허브(Pillar) 글입니다. 
-            ★ 절대 규칙: 아래 제공된 ${extraLinks.length}개의 <서브글> 리스트를 기반으로, 본문 중간중간 관련된 내용이 나올 때 해당 서브글로 이동하는 버튼을 **반드시 각각 하나씩** 삽입하세요.
-            ⚠️ 엉뚱한 링크를 만들지 마세요! 아래 리스트에 있는 **[복사해서 본문에 넣을 HTML 코드]**를 1글자도 바꾸지 말고 그대로 복사해서 배치만 하세요.`
+            ★ 절대 규칙: 
+            1. 본문을 풍성하게 4~8개의 섹션(H2)으로 구성하세요.
+            2. 아래 제공된 ${extraLinks.length}개의 <서브글> 리스트를 기반으로, **본문의 주요 섹션 중 4개를 선정**하여 각 섹션의 마지막 부분에 해당 서브글의 내용을 요약하고 제공된 버튼 코드를 반드시 삽입하세요.
+            3. 섹션의 순서에 맞춰 서브글 1, 2, 3, 4를 차례대로 배치해야 합니다.
+            4. ⚠️ 엉뚱한 링크를 만들지 마세요! 아래 리스트에 있는 **[복사해서 본문에 넣을 HTML 코드]**를 그대로 복사하고, 그 안의 '요약'부분만 직접 집필하세요.`
             : `[INTERNAL_LINK_PUNITIVE_MISSION]: This is a Pillar post. 
-            ★ STRICT RULE: You must insert exactly ${extraLinks.length} buttons in the article body linking to the provided sub-articles.
-            ⚠️ DO NOT generate your own links! Simply COPY AND PASTE the exact **[복사해서 본문에 넣을 HTML 코드]** provided below into appropriate related sections of your content.`;
+            ★ STRICT RULE: 
+            1. You must organize the body into 4-8 rich sections (H2).
+            2. Based on the provided ${extraLinks.length} sub-articles, **select 4 major sections** and at the end of each, summarize the relevant sub-article and insert the provided button code.
+            3. Place Sub-articles 1, 2, 3, and 4 in sequential order within your chosen sections.
+            4. ⚠️ DO NOT generate your own links! Copy the provided **[복사해서 본문에 넣을 HTML 코드]** and only write the 'summary' part inside it.`;
         pillarContext = `\n${contextPrompt}\n\n[서브글 목록 및 주입용 코드]\n${links}`;
     }
 
@@ -995,6 +978,7 @@ async function writeAndPost(model, target, lang, blogger, bId, pTime, extraLinks
     const m1Prompt = MASTER_GUIDELINE + `
 [MISSION: FULL POST GENERATION] 
 정확히 아래 포맷에 맞춰서 한 번에 모든 글을 작성해야 합니다. 절대 포맷을 어기지 마세요.
+전체 본문은 반드시 4~8개의 메인 섹션(H2)으로 풍성하게 구성하세요.
 전체 글 분량은 6,000자~8,000자 이상 확보하도록 상세하게 풀어 쓰세요. 특히, 짧게 넘어가지 말고 본문의 섹션별 설명을 매우 길게 늘려야 합니다.
 
 [필수 디자인 컴포넌트 - 반드시 본문에 포함하세요]:
@@ -1017,6 +1001,7 @@ async function writeAndPost(model, target, lang, blogger, bId, pTime, extraLinks
   "IMG_1": { "prompt": "본문 첫번째 이미지 묘사 영문 프롬프트" },
   "IMG_2": { "prompt": "본문 두번째 이미지 묘사 영문 프롬프트" },
   "IMG_3": { "prompt": "본문 세번째 이미지 묘사 영문 프롬프트" },
+  "IMG_4": { "prompt": "본문 네번째 이미지 묘사 영문 프롬프트" },
   "IMG_PINTEREST": { "mainTitle": "${metaTitles.pin}", "prompt": "Pinterest 전용 세로형(2:3) 고퀄리티 이미지 묘사 영문 프롬프트" }
 }
 [META_DATA_END]
@@ -1038,15 +1023,16 @@ ${h1Instruction}
 <h2 id='section-2'>두번째 섹션</h2>
 <p>본문 내용...</p>
 <div class='tip-box'><strong>💡 Smileseon's Pro Tip</strong><br>꿀팁 내용</div>
+[[IMG_2]]
 <h2>세번째 섹션</h2>
 <p>본문 내용...</p>
 <div class='data-box'><strong>📊 Fact Check</strong><br>데이터 내용</div>
-[[IMG_2]]
+[[IMG_3]]
 <h2>네번째 섹션</h2>
 <p>본문 내용...</p>
 <div class='warn-box'><strong>🚨 Critical Warning</strong><br>주의 내용</div>
-[[IMG_3]]
-... 끝까지 (8~10개의 FAQ, closing-box 마무리 포함)
+[[IMG_4]]
+... 최소 4개에서 최대 8개까지 섹션을 풍성하게 작성하세요. (8~10개의 FAQ, closing-box 마무리 포함)
 <div class='closing-box'><h2>최종 마무리</h2><p>핵심 요약</p></div>
 [CONTENT_END]
 
@@ -1072,6 +1058,7 @@ ${langTag}`;
             if (metaJson.IMG_1) imgMetas[1] = metaJson.IMG_1;
             if (metaJson.IMG_2) imgMetas[2] = metaJson.IMG_2;
             if (metaJson.IMG_3) imgMetas[3] = metaJson.IMG_3;
+            if (metaJson.IMG_4) imgMetas[4] = metaJson.IMG_4;
             if (metaJson.IMG_PINTEREST) imgMetas['P'] = metaJson.IMG_PINTEREST;
         }
     } catch (e) { report('⚠️ 신규 메타 파싱 실패, 레거시 파싱 시도', 'warning'); }
@@ -1099,14 +1086,24 @@ ${langTag}`;
     }
 
     // === 본문에서 메타데이터 잔여물 완전 제거 (최강 정규식) ===
+    // 1단계: 기본적인 메타 블록 제거
     finalHtml = finalHtml.replace(/\[META_DATA_START\][\s\S]*?\[META_DATA_END\]/gi, '');
     finalHtml = finalHtml.replace(/\[CONTENT_START\]/gi, '').replace(/\[CONTENT_END\]/gi, '');
-    finalHtml = finalHtml.replace(/IMG_\d+\s*[:=]\s*\{[\s\S]*?\}/gi, '');
-    finalHtml = finalHtml.replace(/\{\s*"IMG_\d+"[\s\S]*?\}/g, '');
-    finalHtml = finalHtml.replace(/```json[\s\S]*?```/gi, '');
-    finalHtml = finalHtml.replace(/^\s*text\s*$/gm, '');
 
-    // [MARKDOWN_TO_HTML] 마크다운 **강조** 문법을 HTML 태그로 변환시켜 깨짐 현상 방지 (더욱 강력한 정규식 적용)
+    // 2단계: 본문에 잔류하는 어떠한 형태의 JSON 이미지 객체도 박멸 (IMG_ 단어가 포함된 모든 { } 블록 타겟팅)
+    // 특히 쉼표와 중괄호 찌꺼기까지 한꺼번에 잡습니다.
+    finalHtml = finalHtml.replace(/,?\s*\{[\s\S]*?IMG_(?:\d+|PINTEREST)[\s\S]*?\}\s*,?/gi, '');
+    finalHtml = finalHtml.replace(/["']?IMG_(?:\d+|PINTEREST)["']?\s*[:=]\s*\{[\s\S]*?\}/gi, '');
+    finalHtml = finalHtml.replace(/\{[\s\S]*?["']?IMG_(?:\d+|PINTEREST)["']?[\s\S]*?\}/gi, '');
+
+    // 3단계: 기타 코드 블록 및 불필요한 텍스트 찌꺼기 청소
+    finalHtml = finalHtml.replace(/```json[\s\S]*?```/gi, '');
+    finalHtml = finalHtml.replace(/```[\s\S]*?```/gi, '');
+    finalHtml = finalHtml.replace(/^\s*text\s*$/gm, '');
+    finalHtml = finalHtml.replace(/^[ \t]*[,{}]\s*$/gm, ''); // 홀로 남은 쉼표나 중괄호 한 줄 제거
+    finalHtml = finalHtml.replace(/\s*}\s*$/g, ''); // 마지막에 남은 닫는 중괄호 제거
+
+    // [MARKDOWN_TO_HTML] 마크다운 **강조** 문법 변환
     finalHtml = finalHtml.replace(/\*\*([\s\S]*?)\*\*/g, '<strong>$1</strong>');
 
     finalHtml = finalHtml.trim();
@@ -1120,7 +1117,7 @@ ${langTag}`;
         const url0 = await genThumbnail(m0, model);
         finalHtml = `<img src='${url0}' alt='${m0.mainTitle}' style='width:100%; border-radius:15px; margin-bottom:40px;'>` + finalHtml.replace(/\s*\[\[IMG_0\]\]\s*/gi, '');
     }
-    for (let i = 1; i <= 3; i++) {
+    for (let i = 1; i <= 4; i++) {
         const reg = new RegExp(`\\s*\\[\\[IMG_${i}\\]\\]\\s*`, 'gi');
         if (reg.test(finalHtml)) {
             const urlI = await genImg((imgMetas[i] || {}).prompt || target, model, i);
