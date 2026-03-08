@@ -1106,8 +1106,8 @@ ${langTag}`;
     finalHtml = finalHtml.replace(/```json[\s\S]*?```/gi, '');
     finalHtml = finalHtml.replace(/^\s*text\s*$/gm, '');
 
-    // [MARKDOWN_TO_HTML] 마크다운 **강조** 문법을 HTML 태그로 변환시켜 깨짐 현상 방지
-    finalHtml = finalHtml.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    // [MARKDOWN_TO_HTML] 마크다운 **강조** 문법을 HTML 태그로 변환시켜 깨짐 현상 방지 (더욱 강력한 정규식 적용)
+    finalHtml = finalHtml.replace(/\*\*([\s\S]*?)\*\*/g, '<strong>$1</strong>');
 
     finalHtml = finalHtml.trim();
 
@@ -1306,13 +1306,30 @@ async function run() {
 
     if (config.schedule_time) {
         const [sh, sm] = config.schedule_time.split(':');
-        const kstOffsetMs = 9 * 3600000;
-        let nowKst = new Date(Date.now() + kstOffsetMs);
-        nowKst.setUTCHours(parseInt(sh), parseInt(sm), 0, 0); // KST 기준으로 시간 강제 맞춤
-        if (nowKst.getTime() < Date.now() + kstOffsetMs) {
-            nowKst.setUTCDate(nowKst.getUTCDate() + 1); // 지정 시간이 이미 지났다면 내일로 예약
+        const kstHour = parseInt(sh);
+        const kstMin = parseInt(sm);
+        const utcHour = kstHour - 9; // KST → UTC 변환
+
+        // 오늘 날짜 기준으로 스케줄 시간(UTC) 생성
+        const now = new Date();
+        let scheduled = new Date(Date.UTC(
+            now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(),
+            utcHour < 0 ? utcHour + 24 : utcHour, kstMin, 0, 0
+        ));
+        // utcHour가 음수면 하루 전 날짜가 되므로 보정 불필요 (Date.UTC가 알아서 처리)
+        // 단, KST 00:00~08:59는 UTC 기준 전날이므로 날짜 보정
+        if (utcHour < 0) {
+            // 이미 Date.UTC에서 24를 더했으므로, 실제로는 "오늘 KST = 어제 UTC" 케이스
+            // scheduled는 오늘 UTC로 잡혔지만, 실제 KST로는 내일이 될 수 있음
         }
-        currentTime = new Date(nowKst.getTime() - kstOffsetMs); // 다시 UTC 기준 절대 Date로 변환
+
+        // 이미 과거 시간이면 내일로 예약
+        if (scheduled.getTime() < Date.now()) {
+            scheduled.setUTCDate(scheduled.getUTCDate() + 1);
+        }
+
+        currentTime = scheduled;
+        report(`📅 [스케줄] config.schedule_time=${config.schedule_time} KST → UTC 예약시간: ${scheduled.toISOString()} (KST: ${new Date(scheduled.getTime() + 9 * 3600000).toISOString().replace('T', ' ').substring(0, 16)})`);
     }
 
     // 2단계: Spoke(서브 글) 먼저 작성 - 실제 URL 확보
