@@ -1334,19 +1334,13 @@ async function run() {
 
     // 2단계: Spoke(서브 글) 먼저 작성 - 실제 URL 확보
     for (let i = 0; i < spokes.length; i++) {
-        // [핵심] 각 글 발행 이후 간격: 최소 80분에서 최대 120분 사이 랜덤
-        if (config.random_delay) {
-            let delay = 0;
-            if (i > 0) {
-                delay = Math.floor(Math.random() * 41) + 80; // 80 ~ 120 랜덤
-                currentTime.setMinutes(currentTime.getMinutes() + delay);
-            }
-            report(`🎲 [Spoke ${i + 1}] ${delay === 0 ? '첫 글 (기본15분 대기)' : delay + '분 뒤'} 시간 지정: ${new Date(currentTime.getTime() + 9 * 3600000).toISOString().replace('T', ' ').substring(0, 16)} KST`);
-        } else {
-            // 랜덤 사용 안 할 시 20분 간격
-            if (i > 0) currentTime.setMinutes(currentTime.getMinutes() + 20);
-            report(`⏰ [Spoke ${i + 1}] 20분 간격 예약 지정시간: ${new Date(currentTime.getTime() + 9 * 3600000).toISOString().replace('T', ' ').substring(0, 16)} KST`);
+        // [핵심] 각 글 발행 이후 간격: 최소 80분에서 최대 120분 사이 랜덤 (항상 적용)
+        let delay = 0;
+        if (i > 0) {
+            delay = Math.floor(Math.random() * 41) + 80; // 80 ~ 120 랜덤
+            currentTime.setMinutes(currentTime.getMinutes() + delay);
         }
+        report(`🎲 [Spoke ${i + 1}] ${delay === 0 ? '첫 글 (스케줄 기준)' : delay + '분 뒤'} 예약시간: ${new Date(currentTime.getTime() + 9 * 3600000).toISOString().replace('T', ' ').substring(0, 16)} KST`);
 
         const pTime = new Date(currentTime.getTime());
         const sRes = await writeAndPost(model, spokes[i], config.blog_lang, blogger, config.blog_id, pTime, [], i + 1, 5, config.selected_persona);
@@ -1356,14 +1350,9 @@ async function run() {
 
     // 3단계: Pillar(메인 글) 마지막 작성
     report(`🎯 최종 메인 허브(Pillar) 글 작성: ${pillarTitle}`);
-    if (config.random_delay) {
-        const finalDelay = Math.floor(Math.random() * 41) + 80; // 똑같이 80~120분 랜덤
-        currentTime.setMinutes(currentTime.getMinutes() + finalDelay);
-        report(`🎲 [Pillar] ${finalDelay}분 최종 지연 예약: ${new Date(currentTime.getTime() + 9 * 3600000).toISOString().replace('T', ' ').substring(0, 16)} KST`);
-    } else {
-        currentTime.setMinutes(currentTime.getMinutes() + 20);
-        report(`⏰ [Pillar] 최종 블로그 예약 지정시간: ${new Date(currentTime.getTime() + 9 * 3600000).toISOString().replace('T', ' ').substring(0, 16)} KST`);
-    }
+    const pillarDelay = Math.floor(Math.random() * 41) + 80; // 80~120분 랜덤
+    currentTime.setMinutes(currentTime.getMinutes() + pillarDelay);
+    report(`🎲 [Pillar] ${pillarDelay}분 뒤 예약시간: ${new Date(currentTime.getTime() + 9 * 3600000).toISOString().replace('T', ' ').substring(0, 16)} KST`);
 
     const pillarTime = new Date(currentTime.getTime());
     await writeAndPost(model, pillarTitle, config.blog_lang, blogger, config.blog_id, pillarTime, subLinks, 5, 5, config.selected_persona);
