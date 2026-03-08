@@ -895,13 +895,17 @@ async function genImg(prompt, model, idx, ratio = '16:9') {
 
         // 3. Image Hosting Service (ImgBB + Multi-rotation + Fallback)
         try {
-            const res = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 15000, headers: { 'User-Agent': 'Mozilla/5.0' } });
-            if (res.status === 200) {
-                const uploadedUrl = await uploadToImgHost(Buffer.from(res.data).toString('base64'));
-                return uploadedUrl;
-            }
+            const res = await axios.get(imageUrl, {
+                responseType: 'arraybuffer',
+                timeout: 15000,
+                headers: { 'User-Agent': 'Mozilla/5.0' },
+                validateStatus: (status) => status === 200
+            });
+            const uploadedUrl = await uploadToImgHost(Buffer.from(res.data).toString('base64'));
+            return uploadedUrl;
         } catch (imgbbErr) {
-            report(`   ㄴ [ImageHost] 영구 저장 실패 (한도초과 등): 원본 링크 직접 사용`, 'warning');
+            const reason = imgbbErr.response ? `HTTP ${imgbbErr.response.status}` : imgbbErr.message;
+            report(`   ㄴ [Host Error] ${reason.substring(0, 30)}: 원본 링크 직접 사용`, 'warning');
             return imageUrl;
         }
         return imageUrl;
@@ -922,7 +926,14 @@ async function uploadToImgHost(base64Data) {
 
     const hosts = [];
     imgbbKeys.forEach(k => hosts.push({ name: 'ImgBB', key: k, url: 'https://api.imgbb.com/1/upload', param: 'image' }));
-    if (freeimageKey) hosts.push({ name: 'FreeImage', key: freeimageKey, url: 'https://freeimage.host/api/1/upload/', param: 'source' });
+
+    // [LOG_FIX]: 프리이미지 사용 시도 여부 명시
+    if (freeimageKey && freeimageKey.length > 5) {
+        hosts.push({ name: 'FreeImage', key: freeimageKey, url: 'https://freeimage.host/api/1/upload/', param: 'source' });
+        report(`   ㄴ [Host Check] ImgBB(${imgbbKeys.length}개) + FreeImage 준비 완료`);
+    } else {
+        report(`   ㄴ [Host Check] ImgBB(${imgbbKeys.length}개)만 사용 가능 (FreeImage 키 없음)`, 'warning');
+    }
 
     if (hosts.length === 0) throw new Error("이미지 호스팅 키가 없습니다.");
 
