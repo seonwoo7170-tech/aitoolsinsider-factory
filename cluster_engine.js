@@ -902,7 +902,7 @@ async function genImg(prompt, model, idx, ratio = '16:9') {
                 validateStatus: (status) => status === 200
             });
             const uploadedUrl = await uploadToImgHost(Buffer.from(res.data).toString('base64'));
-            return uploadedUrl;
+            return uploadedUrl || imageUrl;
         } catch (imgbbErr) {
             const reason = imgbbErr.response ? `HTTP ${imgbbErr.response.status}` : imgbbErr.message;
             report(`   ㄴ [Host Error] ${reason.substring(0, 30)}: 원본 링크 직접 사용`, 'warning');
@@ -925,34 +925,28 @@ async function uploadToImgHost(base64Data) {
     const freeimageKey = (process.env.FREEIMAGE_API_KEY || '').trim();
 
     const hosts = [];
-    imgbbKeys.forEach(k => hosts.push({ name: 'ImgBB', key: k, url: 'https://api.imgbb.com/1/upload', param: 'image' }));
-
-    // [LOG_FIX]: 프리이미지 사용 시도 여부 명시
+    imgbbKeys.forEach((k, i) => hosts.push({ name: `ImgBB-${i + 1}`, key: k, url: 'https://api.imgbb.com/1/upload', param: 'image' }));
     if (freeimageKey && freeimageKey.length > 5) {
         hosts.push({ name: 'FreeImage', key: freeimageKey, url: 'https://freeimage.host/api/1/upload/', param: 'source' });
-        report(`   ㄴ [Host Check] ImgBB(${imgbbKeys.length}개) + FreeImage 준비 완료`);
-    } else {
-        report(`   ㄴ [Host Check] ImgBB(${imgbbKeys.length}개)만 사용 가능 (FreeImage 키 없음)`, 'warning');
     }
 
-    if (hosts.length === 0) throw new Error("이미지 호스팅 키가 없습니다.");
+    // [ULTIMATE_SHIELD]: Telegraph (No Key, Permanent, No Limit)
+    hosts.push({ name: 'Telegraph(Backup)', key: '', url: 'https://telegra.ph/upload', param: 'file' });
+
+    if (hosts.length === 0) throw new Error("이미지 호스팅 시스템 구성 실패");
+    report(`   ㄴ [Host Check] 총 ${hosts.length}개의 호스트 경로 확보 (무적 백업 포함)`);
 
     for (const host of hosts) {
         try {
             const form = new FormData();
-            form.append('key', host.key);
+            if (host.key) form.append('key', host.key);
 
-            if (host.name === 'FreeImage') {
+            if (host.name.includes('Telegraph')) {
+                form.append('file', Buffer.from(base64Data, 'base64'), { filename: 'image.jpg' });
+            } else {
                 form.append('action', 'upload');
                 form.append('format', 'json');
-                // [CRITICAL_FIX]: 'Empty upload source' 해결을 위해 파일을 Buffer 형태로 전송
-                form.append('source', Buffer.from(base64Data, 'base64'), {
-                    filename: 'upload.jpg',
-                    contentType: 'image/jpeg'
-                });
-            } else {
-                // ImgBB: 텍스트 기반 base64 전송
-                form.append('image', base64Data);
+                form.append(host.param, base64Data);
             }
 
             const ir = await axios.post(host.url, form, {
@@ -962,14 +956,23 @@ async function uploadToImgHost(base64Data) {
                 timeout: 40000
             });
 
-            const resultUrl = ir.data?.data?.url || ir.data?.image?.url;
-            if (resultUrl) return resultUrl;
+            let resultUrl = '';
+            if (host.name.includes('Telegraph')) {
+                if (ir.data?.[0]?.src) resultUrl = 'https://telegra.ph' + ir.data[0].src;
+            } else {
+                resultUrl = ir.data?.data?.url || ir.data?.image?.url;
+            }
+
+            if (resultUrl) {
+                report(`   ㄴ [${host.name}] 업로드 성공! ✅`);
+                return resultUrl;
+            }
         } catch (e) {
-            const errRes = e.response?.data?.error?.message || e.message;
-            report(`   ㄴ [${host.name}] 업로드 실패 (${errRes.substring(0, 40)}): 다음 경로 시도...`, 'warning');
+            const errRes = (e.response?.data?.error?.message || e.message).substring(0, 35);
+            report(`   ㄴ [${host.name}] 시도 실패 (${errRes}): 다음 시도...`, 'warning');
         }
     }
-    throw new Error("모든 이미지 호스팅 시도가 실패했습니다.");
+    return null; // 모든 시도 실패 시 상위에서 원본 링크 사용 유도
 }
 
 async function genThumbnail(meta, model, ratio = '16:9') {
@@ -1049,6 +1052,7 @@ async function genThumbnail(meta, model, ratio = '16:9') {
 
         // [IMAGE_HOST_ROTATION] 통합 업로드 로직 사용
         const uploadedUrl = await uploadToImgHost(cv.toBuffer('image/jpeg').toString('base64'));
+        if (!uploadedUrl) throw new Error("이미지 호스팅 서버 응답 없음");
         return uploadedUrl;
     } catch (e) {
         report(`⚠️ 썸네일 합성/업로드 실패 (${e.message}): 원본 이미지로 대체합니다.`, 'warning');
