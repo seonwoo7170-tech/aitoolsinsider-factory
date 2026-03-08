@@ -19,6 +19,7 @@ jobs:
           SERPER_API_KEY: ${{ secrets.SERPER_API_KEY }}
           IMGBB_API_KEY: ${{ secrets.IMGBB_API_KEY }}
           KIE_API_KEY: ${{ secrets.KIE_API_KEY }}
+          FREEIMAGE_API_KEY: ${{ secrets.FREEIMAGE_API_KEY }}
           BLOG_ID: ${{ secrets.BLOG_ID }}
           GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
