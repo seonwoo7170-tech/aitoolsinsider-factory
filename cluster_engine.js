@@ -977,7 +977,7 @@ async function uploadToImgHost(base64Data) {
 
 async function genThumbnail(meta, model, ratio = '16:9') {
     try {
-        const bgUrl = await genImg(meta.bgPrompt || meta.prompt || meta.mainTitle || target, model, 0, ratio);
+        const bgUrl = await genImg(meta.bgPrompt || meta.prompt || meta.mainTitle || 'premium technology abstract', model, 0, ratio);
         const bg = await loadImage(bgUrl);
         const isPin = ratio === '2:3';
         const w = isPin ? 800 : 1200;
@@ -1129,8 +1129,14 @@ ${lang === 'ko' ? '정확히 아래 포맷에 맞춰서 한 번에 모든 글을
 
 [META_DATA_START]
 {
-  "IMG_0": { "mainTitle": "${metaTitles.thumb}", "bgPrompt": "English prompt for thumbnail" },
-  "IMG_PINTEREST": { "mainTitle": "${metaTitles.pin}", "prompt": "English prompt for Pinterest" }
+  "IMG_0": { 
+    "mainTitle": "(각 글의 주제에 맞는 매력적인 15자 내외의 한국어(또는 영어) 썸네일 제목)", 
+    "bgPrompt": "(해당 섹션의 분위기를 극대화할 수 있는 영문 상세 이미지 프롬프트. 예: Cyberpunk city at night, high detail 등)" 
+  },
+  "IMG_PINTEREST": { 
+    "mainTitle": "(핀터레스트용 제목)", 
+    "prompt": "(핀터레스트용 세로형 이미지 영문 프롬프트)" 
+  }
 }
 [META_DATA_END]
 
