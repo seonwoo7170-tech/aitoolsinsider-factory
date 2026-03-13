@@ -7,10 +7,10 @@ jobs:
   post:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
       - run: sudo apt-get update && sudo apt-get install -y fonts-nanum
       - run: npm install googleapis @google/generative-ai axios form-data canvas p-limit
       - run: node cluster_engine.js
