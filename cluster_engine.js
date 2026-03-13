@@ -12,10 +12,10 @@ const localGmarket = path.join(fontDir, 'GmarketSansBold.ttf');
 const localPretendard = path.join(fontDir, 'Pretendard-Black.ttf');
 
 const fontPaths = [
-    { path: path.join(fontDir, 'GmarketSansBold.otf'), family: 'GmarketSans', weight: 'bold' },
     { path: path.join(fontDir, 'GmarketSansBold.ttf'), family: 'GmarketSans', weight: 'bold' },
     { path: path.join(fontDir, 'Pretendard-Black.ttf'), family: 'Pretendard', weight: 'bold' },
     { path: path.join(fontDir, 'GmarketBackup.ttf'), family: 'GmarketSans', weight: 'bold' },
+    { path: path.join(fontDir, 'BlackHanSans.ttf'), family: 'VUE_K_Font', weight: 'bold' },
     { path: path.join(process.env.WINDIR || 'C:\\Windows', 'Fonts', 'malgunbd.ttf'), family: 'VUE_K_Font', weight: 'bold' },
     { path: '/usr/share/fonts/truetype/nanum/NanumGothicBold.ttf', family: 'VUE_K_Font', weight: 'bold' }
 ];
@@ -1056,11 +1056,14 @@ async function genThumbnail(meta, model, idx = 0, ratio = '16:9') {
         ctx.fillStyle = '#ffffff';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.shadowColor = 'rgba(0,0,0,0.8)';
-        ctx.shadowBlur = 12;
+        ctx.shadowColor = 'rgba(0,0,0,1)'; // 그림자 농도 최대로 (가독성 핵심)
+        ctx.shadowBlur = 18;
+        ctx.shadowOffsetX = 4;
+        ctx.shadowOffsetY = 4;
 
-        const mainTitle = (meta.mainTitle || meta.prompt || '').trim();
-        if (!mainTitle) throw new Error("분석된 썸네일 제목이 없습니다.");
+        // [TITLE_EXTRACTION_FIX]: meta 가 없더라도 fallback 을 통해 문구를 반드시 확보
+        const mainTitle = (meta.mainTitle || meta.thumbTitle || meta.prompt || 'Premium AI Insight').trim();
+        if (!mainTitle) throw new Error("분석된 썸네일 문구가 없습니다.");
 
         const isKorean = /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(mainTitle);
         let fontSize = isPin ? (isKorean ? 72 : 62) : (isKorean ? 65 : 55);
