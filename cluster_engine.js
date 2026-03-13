@@ -896,7 +896,13 @@ async function genImg(prompt, model, idx, ratio = '16:9') {
                         prompt: cleanPrompt + ', photorealistic, 8k, highly detailed, masterpieces',
                         aspect_ratio: ratio // '16:9', '9:16', '1:1' 등 (z-image 공식 지원)
                     }
-                }, { headers: { Authorization: 'Bearer ' + kieKey }, timeout: 45000 });
+                }, { 
+                    headers: { 
+                        'Authorization': `Bearer ${kieKey.trim()}`,
+                        'Content-Type': 'application/json'
+                    }, 
+                    timeout: 45000 
+                });
 
                 const tid = cr.data.taskId || cr.data.data?.taskId;
                 if (tid) {
@@ -932,13 +938,13 @@ async function genImg(prompt, model, idx, ratio = '16:9') {
         }
 
 
-        // 2. [DYNAMIC_RELEVANCE_FIX]: 고정된 스톡 이미지 대신 Unsplash의 키워드 기반 소스를 사용하여 중복을 방지합니다.
+        // 2. [DYNAMIC_RELEVANCE_FIX]: Unsplash source 는 서비스 중단 중이므로 대체 소스 사용
         if (!imageUrl) {
-            const tags = aiData.keywords || 'technology,innovation,business';
-            // 고정된 URL 'https://images.unsplash.com/photo-...' 대신 동적 키워드를 사용하는 소스로 변경 (키워드 콤마로 구분 시 다양성 확보)
-            imageUrl = `https://source.unsplash.com/1200x630/?${encodeURIComponent(tags)}`;
+            const tags = aiData.keywords || 'technology,business';
+            // LoremFlickr 는 키워드 매칭이 더 안정적입니다.
+            imageUrl = `https://loremflickr.com/1200/630/${encodeURIComponent(tags.split(',')[0])}`;
             
-            report(`   ㄴ [Dynamic Stock Match] Unsplash 실시간 매칭 (Keywords: ${tags})`);
+            report(`   ㄴ [Stable Stock Match] LoremFlickr 실시간 매칭 (Category: ${tags.split(',')[0]})`);
         }
 
 
@@ -1041,7 +1047,7 @@ async function genThumbnail(meta, model, idx = 0, ratio = '16:9') {
 
         // 오버레이 및 그라데이션 (가독성 향상)
         if (isPin) {
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'; // 핀터레스트는 좀 더 어둡게
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.55)'; // 핀터레스트 가독성을 위해 더 어둡게
             ctx.fillRect(0, 0, w, h);
         }
 
