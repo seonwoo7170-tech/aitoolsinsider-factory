@@ -1068,98 +1068,44 @@ async function genThumbnail(meta, model, idx = 0, ratio = '16:9') {
         ctx.shadowOffsetY = 4;
 
         // [TITLE_EXTRACTION_FIX]: meta 가 없더라도 fallback 을 통해 문구를 반드시 확보
-        const mainTitle = (meta.mainTitle || meta.thumbTitle || meta.prompt || 'Premium AI Insight').trim();
-        if (!mainTitle) throw new Error("분석된 썸네일 문구가 없습니다.");
+        const mainTitle = (meta.mainTitle || meta.thumbTitle || meta.prompt || 'VUE Premium');
+        ctx.font = `bold ${isPin ? 110 : 72}px "${activeFont}"`;
+        
+        const words = mainTitle.split(' ');
+        let line = '';
+        let y = h / 2 - (isPin ? 100 : 50);
 
-        const isKorean = /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(mainTitle);
-        let fontSize = isPin ? (isKorean ? 72 : 62) : (isKorean ? 65 : 55);
-
-        // 폰트 적용 (등록된 weight: 'bold'를 명시적으로 호출)
-        const fontBase = `bold ${fontSize}px "${activeFont}"`;
-        const fallbackFonts = `"Malgun Gothic", "NanumGothic", "Apple SD Gothic Neo", sans-serif`;
-        ctx.font = `${fontBase}, ${fallbackFonts}`;
-
-        // 텍스트 자동 줄바꿈 (Wrapping)
-        let lines = [];
-        let maxLineW = w * 0.85;
-
-        if (isKorean) {
-            let currentLine = '';
-            for (let char of mainTitle) {
-                let testLine = currentLine + char;
-                if (ctx.measureText(testLine).width > maxLineW) {
-                    lines.push(currentLine);
-                    currentLine = char;
-                } else {
-                    currentLine = testLine;
-                }
+        for (let n = 0; n < words.length; n++) {
+            let testLine = line + words[n] + ' ';
+            let metrics = ctx.measureText(testLine);
+            if (metrics.width > w * 0.8 && n > 0) {
+                ctx.fillText(line, w / 2, y);
+                line = words[n] + ' ';
+                y += isPin ? 130 : 90;
+            } else {
+                line = testLine;
             }
-            lines.push(currentLine);
-        } else {
-            let words = mainTitle.split(' ');
-            let currentLine = '';
-            for (let word of words) {
-                let testLine = currentLine + word + ' ';
-                if (ctx.measureText(testLine).width > maxLineW) {
-                    lines.push(currentLine.trim());
-                    currentLine = word + ' ';
-                } else {
-                    currentLine = testLine;
-                }
-            }
-            lines.push(currentLine.trim());
         }
+        ctx.fillText(line, w / 2, y);
 
-        // 줄수가 너무 많으면 폰트 크기 축소 및 재설정
-        if (lines.length > 3) {
-            fontSize = Math.floor(fontSize * 0.82);
-            ctx.font = `bold ${fontSize}px "${activeFont}", ${fallbackFonts}`;
-        }
-
-
-        // 텍스트 위치 계산 및 그리기
-        const lineHeight = fontSize * 1.35;
-        const totalH = lines.length * lineHeight;
-        let y = isPin ? (h * 0.75) - (totalH / 2) : (h * 0.55) - (totalH / 2);
-
-        report(`📝 [썸네일 합성]: "${mainTitle}" (${lines.length}줄)`);
-
-        for (let l of lines) {
-            ctx.fillText(l, w / 2, y + (lineHeight / 2));
-            y += lineHeight;
-        }
-
-        // 하단 브랜드 라벨
-        ctx.shadowBlur = 0;
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-        ctx.font = `600 24px "${activeFont}", sans-serif`;
-        ctx.fillText('designed by smileseon', w / 2, h * 0.92);
-
-        const uploadedUrl = await uploadToImgHost(cv.toBuffer('image/jpeg', { quality: 0.9 }).toString('base64'));
-        if (!uploadedUrl) throw new Error("업로드 실패");
-        return uploadedUrl;
-
+        return cv.toBuffer('image/jpeg').toString('base64');
     } catch (e) {
-        report(`🚨 썸네일 합성 실패 (${e.message}): 원본 이미지로 진행합니다.`, 'error');
-        return await genImg(meta.mainTitle || meta.prompt || 'professional scene', model, 0, ratio);
+        report(`⚠️ 썸네일 생성 실패: ${e.message}`, 'warning');
+        return null;
     }
 }
 
-
-
-
-async function writeAndPost(model, target, lang, blogger, bId, pTime, extraLinks = [], idx, total, persona = '') {
-    const { text: searchData } = await searchSerper(target, lang);
+async function writeAndPost(model, target, lang, blogger, bId, pTime, extraLinks, idx, total, persona) {
+    const isKo = lang === 'ko';
     let inBodyLinkContext = '';
+    const searchRes = await searchSerper(target, lang);
+    const searchData = searchRes.text;
 
-    const isPillar = idx === total; // 마지막 글이 Pillar(메인) 글임
-    if (extraLinks.length > 0) {
-        const isKo = lang === 'ko';
-        const btnText = isKo ? "▶ 관련 가이드 자세히 보기" : "▶ Read More Guide";
-
-        if (isPillar) {
-            // [PILLAR_STRATEGY]: 섹션별 요약 + 버튼 (최대 4개)
-            const links = extraLinks.map((l, lid) => `[서브글 ${lid + 1}] 제목: ${l.title}\n[복사해서 본문에 넣을 HTML 코드]:\n<div style='margin: 40px 0; border: 1px solid #e5e7eb; border-radius:12px; padding:20px;'><h4 style='margin-top:0; color:#1e293b; font-size:18px;'>📍 Related Topic: ${l.title}</h4><p style='font-size:15px; color:#475569; line-height:1.6;'>여기에 [서브글 ${lid + 1}]의 핵심 내용을 SEO를 고려하여 3~4줄로 흥미진진하게 요약해서 독자의 클릭을 유도하는 글을 직접 작성하세요.</p><a href='${l.url}' class='cluster-btn'>${btnText}</a></div>`).join('\n\n');
+    if (extraLinks && extraLinks.length > 0) {
+        // [LINK_INTELLIGENCE]: Pillar(idx === 5)와 Spoke(idx < 5) 전략 차별화
+        if (idx === 5) {
+            const btnText = isKo ? '필독 관련 가이드 보기' : 'Read Related Guide';
+            const links = extraLinks.map((l, lid) => lid >= 4 ? '' : `<div class='cluster-link-box' style='margin:40px 0; padding:30px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:15px;'><p style='font-size:16px; color:#475569; line-height:1.6;'>여기에 [서브글 ${lid + 1}]의 핵심 내용을 SEO를 고려하여 3~4줄로 흥미진진하게 요약해서 독자의 클릭을 유도하는 글을 직접 작성하세요.</p><a href='${l.url}' class='cluster-btn'>${btnText}</a></div>`).join('\n\n');
 
             const contextPrompt = isKo
                 ? `[INTERNAL_LINK_MISSION]: 이 포스팅은 메인 허브(Pillar) 글입니다. 
@@ -1172,8 +1118,7 @@ async function writeAndPost(model, target, lang, blogger, bId, pTime, extraLinks
                 2. Write the 'summary' part inside the code yourself to be SEO-friendly and engaging.`;
             inBodyLinkContext = `\n${contextPrompt}\n\n[서브글 목록 및 주입용 코드]\n${links}`;
         } else {
-            // [SPOKE_STRATEGY]: 본문 내 자연스러운 맥락 1회 삽입
-            const bestLink = extraLinks[0]; // 가장 관련성 높은 1순위 링크
+            const bestLink = extraLinks[0];
             const contextPrompt = isKo
                 ? `[INTERNAL_LINK_SMART_PLACEMENT]: 이 포스팅은 세부 가이드(Spoke) 글입니다.
                 ★ 본문 중간에 자연스럽게 아래 관련 글을 언급하고 링크 박스를 삽입하세요.
@@ -1196,7 +1141,6 @@ async function writeAndPost(model, target, lang, blogger, bId, pTime, extraLinks
     const personaTag = persona ? `\n[SPECIFIC_PERSONA]: ${persona}` : '';
     const langTag = `\n[TARGET_LANGUAGE]: ${lang === 'ko' ? 'Korean' : 'English'}${personaTag}`;
     report(`🔥 [${idx}/${total}] 집필 시작: ${target}`);
-    report(`💻 [AI 프롬프트 생성 중]: 리서치 데이터 ${searchData.length}자 포함...`);
 
     const h1Instruction = lang === 'ko'
         ? "<h1>(10년차 SEO 전문가의 구글 상단 노출을 위한 롱테일 키워드 제목)</h1>"
@@ -1206,10 +1150,9 @@ async function writeAndPost(model, target, lang, blogger, bId, pTime, extraLinks
         ? { thumb: "KOREAN_CATCHY_SEO_TITLE", pin: "KOREAN_PINTEREST_VIRAL_TITLE" }
         : { thumb: "ENGLISH_CATCHY_SEO_TITLE", pin: "ENGLISH_PINTEREST_VIRAL_TITLE" };
 
-    // MASTER 가이드라인 언어별 선택 (영문 블로그 시 한국어 지침 0%로 제거)
     const baseGuideline = lang === 'ko' ? MASTER_GUIDELINE : MASTER_GUIDELINE_EN;
+    const sectionCount = Math.floor(Math.random() * 4) + 5; // 5~8 sections
 
-    // MISSION 분량 확보를 위한 강력한 지침 추가 (3중 언어 잠금)
     const m1Prompt = `[CRITICAL_LANGUAGE_LOCK]: YOU MUST WRITE EVERYTHING (INCLUDING ALL METADATA) IN ${lang === 'ko' ? 'KOREAN (한국어)' : 'ENGLISH'}.
     ${lang === 'ko' ? '★ 문체 원칙: 정중하고 친근한 **구어체(해요체)**를 100% 사용하세요. (~다. 대신 ~해요, ~했죠, ~인가요? 등을 사용)' : '★ Tone: Use a professional yet conversational human style.'}
     ${lang === 'ko' ? '★ 본 블로그는 한국어 전용입니다. 독자와 직접 대화하듯 생동감 있게 작성하세요.' : '★ This blog is for English readers only. Write everything in native-level English.'}
@@ -1220,21 +1163,21 @@ async function writeAndPost(model, target, lang, blogger, bId, pTime, extraLinks
     DO NOT use Korean in metadata for English posts.
     
     ` + baseGuideline + `
-[MISSION: FULL POST GENERATION] 
-${lang === 'ko' ? '★ 반드시 한국어로 작성하세요! 문체는 부드러운 구어체여야 합니다.' : '★ MUST WRITE IN ENGLISH'}
-${lang === 'ko' ? '정확히 아래 포맷에 맞춰서 한 번에 모든 글을 작성해야 합니다. 전체 본문은 반드시 4~8개의 메인 섹션(H2)으로 풍성하게 구성하세요. 분량은 6,000자~8,000자 이상 확보하세요.' : 'Follow the format below exactly and write 4-8 sections. Length 6,000 to 8,000+ characters.'}
+[MISSION: FULL POST GENERATION - MASTER VERSION] 
+★ You MUST follow these Master Rules:
+1. **Quantity & Quality**: Write exactly ${sectionCount} sections (H2). Total length must exceed 10,000 to 12,000+ characters (in ${lang === 'ko' ? 'Korean' : 'English'}).
+2. **Density Clause**: Since you are writing ${sectionCount} sections, each section MUST be extremely detailed and dense. Usage of elaborate stories, case studies, and expert narratives is mandatory.
+3. **Paragraph Styling**: MUST apply inline style to EVERY <p> tag: <p style='margin: 30px 0; letter-spacing: -0.015em; line-height: 1.85;'>
+4. **Data Tables**: Each H2 section MUST have at least one comparison or data table (min 4x4 or 3x5).
+5. **Special Components**: MUST include 30 Professional FAQs at the end.
+6. **Schema Markup**: MUST generate a unified JSON-LD Schema (@graph including Article and FAQPage) at the very bottom.
 
-[필수 디자인 컴포넌트 - 반드시 본문에 포함하세요]:
-★ 배치 전략:
-    - 글이 지루해지지 않도록, H2 텍스트가 2개째 등장하는 타이밍마다 삽입하여 독자의 시선을 적절하게 환기하세요.
-    - **[Time Awareness]**: Today's date is ${getKSTDateString()}. Always write based on the latest available information as of today. If referencing years, focus on the current year and future trends.
-
-(A) 인사이트 박스 → <div class='insight-box'><strong>💡 ${lang === 'ko' ? '핵심 인사이트' : 'Key Insight'}</strong><br>${lang === 'ko' ? '핵심 포인트 내용' : 'Core insight content'}</div>
-(B) 전문가 꿀팁 → <div class='tip-box'><strong>💡 ${lang === 'ko' ? "스마일선의 Pro Tip" : "Smileseon's Pro Tip"}</strong><br>${lang === 'ko' ? '꿀팁 내용' : 'Pro tip details'}</div>
-(C) 면책 조항 (Disclaimer): 반드시 글의 최하단에 위치시키고 레이블을 강조하세요.
-(D) 치명적 주의 → <div class='warn-box'><strong>🚨 ${lang === 'ko' ? '치명적 주의' : 'Critical Warning'}</strong><br>${lang === 'ko' ? '주의 내용' : 'Critical warning details'}</div>
-(E) 신뢰 데이터 → <div class='data-box'><strong>📊 ${lang === 'ko' ? '팩트 체크' : 'Fact Check'}</strong><br>${lang === 'ko' ? '팩트 체크 내용' : 'Fact check details'}</div>
-(F) 마무리 박스 → <div class='closing-box'><h2>(주제와 관련된 독특한 결론 제목)</h2><p>(전문가로서의 뼈 때리는 최종 조언)</p></div>
+[REQUIRED COMPONENTS]:
+(A) Insight Box → <div class='insight-box'><strong>💡 ${lang === 'ko' ? '핵심 인사이트' : 'Key Insight'}</strong><br>(Description)</div>
+(B) Pro Tip Box → <div class='tip-box'><strong>💡 ${lang === 'ko' ? "스마일선의 Pro Tip" : "Smileseon's Pro Tip"}</strong><br>(Details)</div>
+(C) Warning Box → <div class='warn-box'><strong>🚨 ${lang === 'ko' ? '치명적 주의' : 'Critical Warning'}</strong><br>(Warning details)</div>
+(D) Fact Check Box → <div class='data-box'><strong>📊 ${lang === 'ko' ? '팩트 체크' : 'Fact Check'}</strong><br>(Fact data)</div>
+(E) Closing Box → <div class='closing-box'><h2>(Unique Title)</h2><p>(Cynical expert advice)</p></div>
 
 [META_DATA_START]
 {
@@ -1249,32 +1192,43 @@ ${lang === 'ko' ? '정확히 아래 포맷에 맞춰서 한 번에 모든 글을
 }
 [META_DATA_END]
 
-
 [CONTENT_START]
 ${h1Instruction}
 <div class='toc-box'>
   <h3>${lang === 'ko' ? '목차' : 'Table of Contents'}</h3>
   <ul>
-    <li><a href='#section-1'>(본문의 실제 첫 번째 소제목)</a></li>
-    <li><a href='#section-2'>(본문의 실제 두 번째 소제목)</a></li>
-    ... 모든 H2를 소제목으로 명시하세요.
+    ${Array.from({ length: sectionCount }, (_, i) => `<li><a href='#section-${i + 1}'>(Section ${i + 1} Title)</a></li>`).join('\n    ')}
   </ul>
 </div>
-<h2 id='section-1'>(실제 첫 번째 섹션 제목)</h2>
-<p>(AI 흔적 없는 생생한 본문 내용...)</p>
-<div class='insight-box'><strong>💡 ${lang === 'ko' ? '핵심 인사이트' : 'Key Insight'}</strong><br>(인사이트 내용)</div>
-[[IMG_1]]
-<h2 id='section-2'>(실제 두 번째 섹션 제목)</h2>
-<p>(구체적 수치와 사례 포함...)</p>
-<div class='tip-box'><strong>💡 ${lang === 'ko' ? '전문가 꿀팁' : "Smileseon's Pro Tip"}</strong><br>(꿀팁 내용)</div>
-[[IMG_2]]
 
-... (본문 섹션 4~8개 자유롭게 구성) ...
+${Array.from({ length: sectionCount }, (_, i) => `<h2 id='section-${i + 1}'>(Unique H2 Title ${i + 1})</h2>
+<p style='margin: 30px 0; letter-spacing: -0.015em; line-height: 1.85;'>(Extremely detailed expert narrative part 1...)</p>
+<p style='margin: 30px 0; letter-spacing: -0.015em; line-height: 1.85;'>(Case study and data analysis part 2...)</p>
+<table style='width:100%; border-collapse:collapse; margin:30px 0;'>... 4x4 data table ...</table>
+<p style='margin: 30px 0; letter-spacing: -0.015em; line-height: 1.85;'>(Expert opinion and future outlook part 3...)</p>
+${i === 1 ? '[[IMG_1]]' : ''}${i === 3 ? '[[IMG_2]]' : ''}`).join('\n\n')}
 
-<div class='closing-box'><h2>(상황에 맞는 독특한 마무리 제목)</h2><p>(냉소적이고 현실적인 마지막 한 줄 조언)</p></div>
+<div class='faq-section' style='background: #f8fafc; padding: 40px; border-radius: 20px; margin-top: 80px;'>
+  <h2 style='border:none; margin-top:0;'>${lang === 'ko' ? '자주 묻는 질문 (FAQ)' : 'Frequently Asked Questions (FAQ)'}</h2>
+  ${Array.from({ length: 30 }, (_, i) => `<div class='faq-item' style='margin-bottom:25px;'>
+    <p style='font-weight:700; color:#1e293b; margin-bottom:10px;'>Q${i + 1}. (Professional Question ${i + 1})</p>
+    <p style='margin:0; color:#475569;'>A${i + 1}. (Detailed Answer ${i + 1})</p>
+  </div>`).join('\n  ')}
+</div>
+
+<div class='closing-box'><h2>(Conclusion Title)</h2><p>(Final human advice)</p></div>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    { "@type": "Article", ... },
+    { "@type": "FAQPage", ... }
+  ]
+}
+</script>
 [CONTENT_END]
 
-★ 경고: 본문 내에 이미지 삽입부에는 절대로 <img src=...> 태그를 쓰지 말고, 오직 [[IMG_1]], [[IMG_2]], [[IMG_3]] 과 같은 치환자만 적으세요.
 ${target}
 ${searchData}
 ${inBodyLinkContext}
@@ -1545,6 +1499,12 @@ async function run() {
     const langName = config.blog_lang === 'ko' ? 'Korean' : 'English';
     const personaTag = config.selected_persona ? `\n[SPECIFIC_PERSONA]: ${config.selected_persona}` : '';
 
+    // [DYNAMIC_AI_LOGIC]: 카테고리에 따른 AI 언급 강도 조절 (PC정비 등 일반 카테고리에서 AI 남발 방지)
+    const isAICategory = config.target_categories && config.target_categories.includes("4");
+    const aiConstraint = isAICategory 
+        ? "★ AI Focus: This is an AI category. Actively use AI-related terminology and future tech trends in your titles." 
+        : "★ AI Restriction: DO NOT overuse the word 'AI' in every title. Focus on practical hardware repair, parts replacement, and traditional maintenance know-how. Use 'AI' only as a minor supportive tool if necessary.";
+
     const clusterPrompt = config.blog_lang === 'ko'
         ? `당신은 토픽 클러스터(Topic Clusters)를 전문으로 하는 구글 SEO 전문가입니다.${personaTag}
     오늘 날짜는 ${getKSTDateString()}입니다.
@@ -1552,6 +1512,9 @@ async function run() {
     
     ★ 미션: 구글 검색을 장악할 수 있는 고성능 블로그 포스팅 제목 5개(Pillar 1개 + Spoke 4개)를 한국어로 생성하세요.
     
+    [중요: AI 사용 가이드라인]:
+    ${isAICategory ? '★ AI 강조: 이 블로그는 AI 전문 카테고리입니다. 제목에 AI 관련 용어와 최신 기술 트렌드를 적극적으로 반영하세요.' : '★ AI 절제: 모든 제목에 \'AI\'를 남발하지 마세요. 실제 하드웨어 수리, 부품 교체, 윈도우 최적화 등 정통적인 정비사의 노하우를 우선시하세요.'}
+
     [중요: 페르소나 목소리]:
     - 위에 정의된 [SPECIFIC_PERSONA]의 전문 용어, 말투, 관점을 사용하세요.
     - 엔지니어라면 기술적이고 정밀하게, 요리사라면 감각적이고 권위 있게 작성하세요.
@@ -1570,6 +1533,9 @@ async function run() {
     
     ★ MISSION: Create 5 high-performing blog post titles (1 Pillar + 4 Spokes) in English that dominate Google Search.
     
+    [IMPORTANT: AI USAGE GUIDELINE]:
+    ${aiConstraint}
+
     [IMPORTANT: PERSONA VOICE]:
     - Use the vocabulary, tone, and perspective of the [SPECIFIC_PERSONA] defined above.
     
