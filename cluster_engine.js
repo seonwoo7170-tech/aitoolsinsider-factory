@@ -1379,7 +1379,7 @@ ${langTag}`;
         // AI가 생성한 메타데이터가 한글일 경우를 대비해 finalTitle을 우선 사용
         const thumbTitle = (lang === 'en' && /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(m0.mainTitle)) ? finalTitle : m0.mainTitle;
         const url0 = await genThumbnail({ ...m0, mainTitle: thumbTitle || finalTitle }, model, idx);
-        finalHtml = `<img src='${url0}' alt='${finalTitle}' style='width:100%; border-radius:15px; margin-bottom:40px;'>` + finalHtml.replace(/\s*\[\[IMG_0\]\]\s*/gi, '');
+        finalHtml = `<img src='${url0}' alt='${finalTitle}' style='width:100%; border-radius:15px; margin-bottom:40px;' id='main-thumb-img' data-pin-nopin="true">` + finalHtml.replace(/\s*\[\[IMG_0\]\]\s*/gi, '');
     }
 
     // 2. 본문 이미지 (IMG_1~4)
@@ -1388,14 +1388,14 @@ ${langTag}`;
         if (reg.test(finalHtml)) {
             const imgPrompt = (imgMetas[i] && imgMetas[i].prompt) ? imgMetas[i].prompt : finalTitle;
             const urlI = await genImg(imgPrompt, model, i);
-            finalHtml = finalHtml.replace(reg, `<div style='text-align:center; margin:35px 0;'><img src='${urlI}' alt='${finalTitle}' style='width:100%; border-radius:12px;'></div>`);
+            finalHtml = finalHtml.replace(reg, `<div style='text-align:center; margin:35px 0;'><img src='${urlI}' alt='${finalTitle}' style='width:100%; border-radius:12px;' data-pin-nopin="true"></div>`);
         } else {
             // 치환자가 없어도 H2 사이에 적절히 배분하여 주입
             const urlI = await genImg(finalTitle, model, i);
             let count = 0;
             finalHtml = finalHtml.replace(/<h2/gi, (match) => {
                 count++;
-                if (count === (i * 2)) return `<div style='text-align:center; margin:35px 0;'><img src='${urlI}' alt='${finalTitle}' style='width:100%; border-radius:12px;'></div>\n<h2`;
+                if (count === (i * 2)) return `<div style='text-align:center; margin:35px 0;'><img src='${urlI}' alt='${finalTitle}' style='width:100%; border-radius:12px;' data-pin-nopin="true"></div>\n<h2`;
                 return match;
             });
         }
@@ -1406,7 +1406,17 @@ ${langTag}`;
     try {
         const pinTitle = (lang === 'en' && imgMetas['P'] && /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(imgMetas['P'].mainTitle)) ? finalTitle : (imgMetas['P']?.mainTitle || finalTitle);
         urlPin = await genThumbnail({ mainTitle: pinTitle, bgPrompt: finalTitle + " premium vertical infographic" }, model, idx + 10, '9:16');
-        finalHtml = `<div style='display:none;'><img src='${urlPin}' alt='Pinterest - ${finalTitle}'></div>\n` + finalHtml.replace(/\[\[IMG_PINTEREST\]\]/gi, '');
+        
+        // [SEO_BOOST] 핀터레스트 설명문에 타겟 키워드 기반 해시태그 주입
+        const baseKeywords = target.split(' ').map(w => '#' + w.replace(/[^a-zA-Z0-9가-힣]/g, '')).filter(w => w.length > 1).join(' ');
+        const richPinDesc = `${pinTitle} | ${target} ${baseKeywords}`;
+
+        // 핀 이미지를 DOM에 숨기되 봇이 접근 가능하도록 렌더링
+        finalHtml = `<div style='height:0; width:0; overflow:hidden; position:absolute; z-index:-1;'><img src='${urlPin}' alt='${finalTitle} - Pinterest' data-pin-description='${richPinDesc}'></div>\n` + finalHtml.replace(/\[\[IMG_PINTEREST\]\]/gi, '');
+        
+        // 메인 썸네일에서 핀 속성을 켜줍니다 (클릭하면 urlPin이 핀 되도록 연결)
+        finalHtml = finalHtml.replace(`id='main-thumb-img' data-pin-nopin="true">`, `id='main-thumb-img' data-pin-media='${urlPin}' data-pin-description='${richPinDesc}'>`);
+
     } catch (e) { report('⚠️ 핀터레스트 썸네일 생략: ' + e.message, 'warning'); }
 
     // === [LINK_STABILITY] 메인글 하단에 서브글 링크 목록 자동 생성 (안전장치) ===
@@ -1430,12 +1440,23 @@ ${langTag}`;
         finalHtml += linkListHtml;
     }
 
-    // [CRITICAL FIX]: Remove redundant hardcoded disclaimer here because AI will generate it based on Master Guideline.
+    // [CRITICAL FIX]: Blogger가 최상단 <style> 텍스트를 긁어가서 핀터레스트/SNS 설명문에 CSS 코드가 뜨는 대참사 방지
+    // <style> 블록만 분리하여 본문 최하단으로 밀어버리고, 최상단에는 순수 본문 텍스트만 렌더링시킵니다.
+    const cssMatch = STYLE.match(/<style>[\s\S]*?<\/style>/i);
+    const cssBlock = cssMatch ? cssMatch[0] : '';
+    const containerStart = STYLE.replace(/<style>[\s\S]*?<\/style>/i, '').trim();
+
+    // [SNIPPET_ENGINE]: 본문에서 순수 텍스트를 추출하여 검색 설명(SEO Description)으로 활용
+    const rawText = finalHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    const seoDescription = rawText.substring(0, 180).trim() + "...";
+
     const isFuture = pTime.getTime() > Date.now() + 60000;
     const reqBody = {
         title: finalTitle,
-        content: STYLE + finalHtml + '</div>',
-        published: pTime.toISOString()
+        // [SEO_BOOST]: 최상단에 히든 요약 div를 배치하여 스크래퍼가 CSS보다 먼저 텍스트를 잡도록 유도
+        content: `<div style="display:none; max-height:0; overflow:hidden;">${seoDescription}</div>\n` + containerStart + '\n' + finalHtml + '\n</div>\n' + cssBlock,
+        published: pTime.toISOString(),
+        searchDescription: seoDescription // Blogger API의 검색 설명 필드 활용
     };
     // [SCHEDULE_STABILITY]: 시간이 미래라면 구글 블로그 API 스펙에 맞춰 명시적으로 SCHEDULED 상태를 던집니다.
     if (isFuture) reqBody.status = 'SCHEDULED';
