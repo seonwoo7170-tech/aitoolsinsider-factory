@@ -697,7 +697,7 @@ function getKST() {
 
 function report(msg, type = 'info') {
     const icon = type === 'success' ? '\u2705' : type === 'warning' ? '\u26A0\uFE0F' : type === 'error' ? '\u274C' : '\u2139\uFE0F';
-    const logMsg = `[${getKST().toLocaleTimeString('ko-KR')}] ${icon} ${msg}`;
+    const logMsg = `[${getKST().toLocaleTimeString('en-GB')}] ${icon} ${msg}`;
     console.log(logMsg);
 }
 
@@ -719,7 +719,7 @@ async function callAI(model, prompt) {
     } catch (e) {
         const msg = e.message.toLowerCase();
         if (msg.includes('429') || msg.includes('quota') || msg.includes('exhausted')) {
-            report('⏳ [API 할당량 초과]: 60초 후 재시도...', 'warning');
+            report('[API QUOTA EXCEEDED]: Retrying in 60s...', 'warning');
             await new Promise(r => setTimeout(r, 60000));
             return callAI(model, prompt);
         }
@@ -729,14 +729,15 @@ async function callAI(model, prompt) {
 
 async function searchSerper(query, lang) {
     try {
-        report(`🔍 [포스팅 리서치]: "${query}" 관련 최신 데이터 수집 중...`);
-        const res = await axios.post('https://google.serper.dev/search', { q: query, gl: lang === 'ko' ? 'kr' : 'us', hl: lang }, { headers: { 'X-API-KEY': process.env.SERPER_API_KEY, 'Content-Type': 'application/json' }, timeout: 15000 });
+        report(`[RESEARCH]: Gathering latest data for "${query}"...`);
+        const q = String(query).replace(/[&]/g, 'and');
+        const res = await axios.post('https://google.serper.dev/search', { q: q, gl: lang === 'ko' ? 'kr' : 'us', hl: lang || 'en' }, { headers: { 'X-API-KEY': process.env.SERPER_API_KEY, 'Content-Type': 'application/json' }, timeout: 15000 });
         const data = res.data.organic || [];
         const result = { text: data.slice(0, 5).map(o => `Title: ${o.title}\nSnippet: ${o.snippet}`).join('\n\n') };
-        report(`✅ [리서치 완료]: 상위 ${data.length}개 검색 결과 분석 완료`);
+        report(`[RESEARCH SUCCESS]: Analyzed top ${data.length} sources.`);
         return result;
     } catch (e) {
-        report(`❌ [Serper 에러]: ${e.message}`, 'warning');
+        report(`[SERPER ERROR]: ${e.message} (Check your API Key)`, 'warning');
         return { text: '' };
     }
 }
