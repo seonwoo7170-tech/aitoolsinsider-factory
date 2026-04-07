@@ -835,18 +835,34 @@ async function run() {
         report(`✅ 함대 설정 로드 완료. (카테고리: ${config.target_categories})`);
         
         const categories = {
-            "6": { name: "Cooking & Recipes", persona: "15년차 글로벌 셰프 출신의 요리 연구가" }
+            "1": { name: "PC Repair & Hardware Solutions", persona: "20년 경력의 워크스테이션 빌더 및 하드웨어 전문 엔지니어" },
+            "2": { name: "Real Estate & Investment", persona: "데이터 기반의 공인중개사 및 부동산 시장 분석가" },
+            "3": { name: "Economy & World Market", persona: "글로벌 거시 경제 흐름을 추적하는 경제 전략가" },
+            "4": { name: "AI Technology & Automation", persona: "최첨단 AI API와 자동화 툴을 연구하는 풀스택 엔지니어" },
+            "5": { name: "Software Development & Coding", persona: "클린 코드를 지향하는 시니어 소프트웨어 아키텍트" },
+            "6": { name: "Global Cooking & Recipes", persona: "15년차 글로벌 셰프 출신의 요리 연구가" },
+            "7": { name: "Fashion & Trend Analysis", persona: "글로벌 패션 위크 트렌드를 분석하는 스타일 큐레이터" },
+            "8": { name: "Health & Medical Science", persona: "근거 중심 의학 정보를 전달하는 헬스케어 전문가" },
+            "9": { name: "Global News & Current Affairs", persona: "정확한 팩트 체크를 중시하는 시사 전문 평론가" },
+            "10": { name: "Finance & AdSense Logic", persona: "수익성 블로그 운영과 광고 최적화 전문 컨설턴트" },
+            "11": { name: "Global Travel & Exploration", persona: "전 세계 숨은 명소를 탐험하는 전문 여행 작가" },
+            "12": { name: "Home Interior & Living Solutions", persona: "미학적 공간 구성을 설계하는 인테리어 디자이너" },
+            "13": { name: "Beauty & Expert Reviews", persona: "코스메틱 성분을 분석하고 결과를 증명하는 뷰티 전문가" },
+            "14": { name: "Life Hacks & Efficiency", persona: "일상의 모든 업무를 시스템화하는 생산성 전문가" }
         };
-        const curCat = categories[config.target_categories[0]] || categories["6"];
         
-        const clusterPrompt = `Select 5 trending niche topics for ${curCat.name} blog. Output ONLY a JSON array of strings.`;
+        const catId = String(config.target_categories[0]);
+        const curCat = categories[catId] || categories["4"]; // Default to AI Tech instead of Cooking!
+        report(`🎯 타겟 페르소나 활성화: [${curCat.name}] - ${curCat.persona}`);
+        
+        const clusterPrompt = `Select 5 high-density, trending niche topics for a "${curCat.name}" professional blog. Output ONLY as a JSON array of strings.`;
         const clusterRes = await callAI(model, clusterPrompt);
         const topics = JSON.parse(clean(clusterRes, 'arr'));
         
         let currentTime = getKST();
         for (let i = 0; i < topics.length; i++) {
             currentTime.setMinutes(currentTime.getMinutes() + 10);
-            await writeAndPost(model, topics[i], config.blog_lang, blogger, config.blog_id, currentTime, [], i + 1, 5, curCat.persona);
+            await writeAndPost(model, topics[i], config.blog_lang, blogger, config.blog_id, currentTime, [], i + 1, topics.length, curCat.persona);
         }
         report('\uD83C\uDF89 모든 독립 포스팅 발행 작전 완료!', 'success');
     } catch (e) {
