@@ -718,8 +718,8 @@ async function callAI(model, prompt) {
         return res.response.text();
     } catch (e) {
         const msg = e.message.toLowerCase();
-        if (msg.includes('429') || msg.includes('quota') || msg.includes('exhausted')) {
-            report('[API QUOTA EXCEEDED]: Retrying in 60s...', 'warning');
+        if (msg.includes('429') || msg.includes('quota') || msg.includes('503') || msg.includes('unavailable')) {
+            report('[API BUSY/QUOTA]: Google servers are busy or quota full. Retrying in 60s...', 'warning');
             await new Promise(r => setTimeout(r, 60000));
             return callAI(model, prompt);
         }
