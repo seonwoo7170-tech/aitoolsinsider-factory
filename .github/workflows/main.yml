@@ -12,7 +12,7 @@ jobs:
         with:
           node-version: 18
       - name: Install
-        run: npm install googleapis @google/generative-ai axios form-data canvas
+        run: npm install googleapis @google/generative-ai axios form-data
       - name: Run
         run: node cluster_engine.js
         env:
