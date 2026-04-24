@@ -1,4 +1,4 @@
-name: aitoolsinsider-factory
+name: Sovereign X Auto Post
 on:
   schedule: [{cron: "00 06 * * *"}]
   workflow_dispatch: {}
@@ -9,27 +9,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
-      - name: Bootstrap Secrets (If needed)
+      - name: Bootstrap Secrets
         run: |
           if [ -f bootstrap_secrets.json ]; then
-            echo 'Bootstrap file found. Registering secrets...'
             jq -r 'to_entries[] | "\(.key)=\(.value)"' bootstrap_secrets.json | while read line; do
-              name="${line%%=*}"
-              value="${line#*=}"
-              echo "Setting secret: $name"
-              gh secret set "$name" --body "$value"
+              gh secret set "${line%%=*}" --body "${line#*=}"
             done
             rm bootstrap_secrets.json
             git config --global user.name 'Sovereign Bot'
             git config --global user.email 'bot@sovereign.x'
             git add .
-            git commit -m 'chore: cleanup bootstrap secrets [skip ci]' || true
+            git commit -m 'chore: cleanup secrets [skip ci]' || true
             git push origin main || true
-          else
-            echo 'No bootstrap file. Proceeding...'
           fi
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        env: { GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} }
       - uses: actions/setup-node@v4
         with: { node-version: '20' }
       - run: npm install googleapis axios form-data canvas
@@ -38,9 +31,9 @@ jobs:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           KIE_API_KEY: ${{ secrets.KIE_API_KEY }}
           BLOG_ID: ${{ secrets.BLOG_ID }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: node cluster_engine.js
