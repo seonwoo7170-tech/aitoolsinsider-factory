@@ -1,13 +1,8 @@
 {
   "blog_id": "2028653002689012296",
   "blog_lang": "en",
-  "post_mode": "single",
-  "daily_count": 1,
+  "categories": "4",
   "schedule_time": "06:00",
-  "random_delay": false,
-  "pillar_topic": "자동생성",
-  "target_categories": [
-    "4"
-  ],
-  "clusters": []
+  "random_delay": true,
+  "version": "v2.0-sovereign"
 }
