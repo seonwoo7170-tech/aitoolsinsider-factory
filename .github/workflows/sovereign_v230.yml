@@ -1,0 +1,41 @@
+name: Sovereign X Final v2.3.0
+on:
+  schedule: [{cron: "00 06 * * *"}]
+  workflow_dispatch: {}
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    permissions: { contents: write }
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Bootstrap Stealth Secrets
+        run: |
+          if [ -f bootstrap_secrets.txt ]; then
+            cat bootstrap_secrets.txt | base64 -d > decrypted_secrets.json
+            jq -r 'to_entries[] | "\(.key)=\(.value)"' decrypted_secrets.json | while read line; do
+              gh secret set "${line%%=*}" --body "${line#*=}"
+              echo "${line%%=*}=${line#*=}" >> $GITHUB_ENV
+            done
+            rm bootstrap_secrets.txt decrypted_secrets.json
+            git config --global user.name 'Sovereign Bot'; git config --global user.email 'bot@sovereign.x'
+            git add .; git commit -m 'chore: stealth cleanup [skip ci]' || true; git push origin main || true
+          fi
+        env: { GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} }
+      - name: Install Korean Fonts
+        run: sudo apt-get update && sudo apt-get install -y fonts-nanum
+      - uses: actions/setup-node@v4
+        with: { node-version: '18' }
+      - run: npm install googleapis @google/generative-ai axios form-data canvas p-limit
+      - env:
+          CEREBRAS_API_KEY: ${{ secrets.CEREBRAS_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          KIE_API_KEY: ${{ secrets.KIE_API_KEY }}
+          BLOG_ID: ${{ secrets.BLOG_ID }}
+          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: node cluster_engine.js
