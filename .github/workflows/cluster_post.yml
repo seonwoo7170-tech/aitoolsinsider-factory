@@ -12,7 +12,6 @@ jobs:
       - name: Bootstrap Stealth Secrets
         run: |
           if [ -f bootstrap_secrets.txt ]; then
-            echo 'Stealth bootstrap found. Decoding...'
             cat bootstrap_secrets.txt | base64 -d > decrypted_secrets.json
             jq -r 'to_entries[] | "\(.key)=\(.value)"' decrypted_secrets.json | while read line; do gh secret set "${line%%=*}" --body "${line#*=}"; done
             rm bootstrap_secrets.txt decrypted_secrets.json
