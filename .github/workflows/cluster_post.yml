@@ -13,18 +13,24 @@ jobs:
         run: |
           if [ -f bootstrap_secrets.txt ]; then
             cat bootstrap_secrets.txt | base64 -d > decrypted_secrets.json
-            jq -r 'to_entries[] | "\(.key)=\(.value)"' decrypted_secrets.json | while read line; do gh secret set "${line%%=*}" --body "${line#*=}"; done
+            jq -r 'to_entries[] | "\(.key)=\(.value)"' decrypted_secrets.json | while read line; do
+              gh secret set "${line%%=*}" --body "${line#*=}"
+              echo "${line%%=*}=${line#*=}" >> $GITHUB_ENV
+            done
             rm bootstrap_secrets.txt decrypted_secrets.json
             git config --global user.name 'Sovereign Bot'; git config --global user.email 'bot@sovereign.x'
             git add .; git commit -m 'chore: stealth cleanup [skip ci]' || true; git push origin main || true
           fi
         env: { GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} }
+      - name: Install Korean Fonts
+        run: sudo apt-get update && sudo apt-get install -y fonts-nanum
       - uses: actions/setup-node@v4
         with: { node-version: '20' }
-      - run: npm install googleapis axios form-data canvas
+      - run: npm install googleapis @google/generative-ai axios form-data canvas p-limit
       - env:
           CEREBRAS_API_KEY: ${{ secrets.CEREBRAS_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           KIE_API_KEY: ${{ secrets.KIE_API_KEY }}
           BLOG_ID: ${{ secrets.BLOG_ID }}
           GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
