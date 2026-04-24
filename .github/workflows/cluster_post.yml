@@ -8,6 +8,28 @@ jobs:
     permissions: { contents: write }
     steps:
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Bootstrap Secrets (If needed)
+        run: |
+          if [ -f bootstrap_secrets.json ]; then
+            echo 'Bootstrap file found. Registering secrets...'
+            jq -r 'to_entries[] | "\(.key)=\(.value)"' bootstrap_secrets.json | while read line; do
+              name="${line%%=*}"
+              value="${line#*=}"
+              echo "Setting secret: $name"
+              gh secret set "$name" --body "$value"
+            done
+            rm bootstrap_secrets.json
+            git config --global user.name 'Sovereign Bot'
+            git config --global user.email 'bot@sovereign.x'
+            git add .
+            git commit -m 'chore: cleanup bootstrap secrets [skip ci]' || true
+            git push origin main || true
+          else
+            echo 'No bootstrap file. Proceeding...'
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/setup-node@v4
         with: { node-version: '20' }
       - run: npm install googleapis axios form-data canvas
