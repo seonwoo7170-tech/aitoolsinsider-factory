@@ -1,6 +1,7 @@
 name: VUE Cluster Auto Post
 on:
-  schedule: [{cron: '00 06 * * *'}]
+  schedule:
+    - cron: '00 06 * * *'
   workflow_dispatch: {}
 jobs:
   post:
