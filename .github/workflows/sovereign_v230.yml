@@ -1,4 +1,4 @@
-name: Sovereign X Final v2.3.2
+name: Sovereign X Final v2.3.3
 on:
   schedule: [{cron: "00 06 * * *"}]
   workflow_dispatch: {}
