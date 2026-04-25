@@ -1,11 +1,6 @@
-console.log('--- Sovereign Engine v2.5.3 Initialized [Master Orchestration] ---');
+console.log('--- Sovereign Engine v2.5.5 Initialized [UI Enforcer] ---');
 const { google } = require('googleapis'); const { GoogleGenerativeAI } = require('@google/generative-ai'); const fs = require('fs'); const axios = require('axios'); const FormData = require('form-data'); const { createCanvas, loadImage, registerFont } = require('canvas');
 if (fs.existsSync('/usr/share/fonts/truetype/nanum/NanumGothicBold.ttf')) { registerFont('/usr/share/fonts/truetype/nanum/NanumGothicBold.ttf', { family: 'VUE_K_Font', weight: 'bold' }); console.log('✅ Font Loaded'); }
-async function callAI(p, r = 0) { 
-  if (process.env.CEREBRAS_API_KEY) { try { console.log('   [AI] Cerebras (Primary)...'); const res = await axios.post('https://api.cerebras.ai/v1/chat/completions', { model: 'qwen-3-235b-a22b-instruct-2507', messages: [{ role: 'user', content: p }], temperature: 0.72 }, { headers: { 'Authorization': 'Bearer ' + process.env.CEREBRAS_API_KEY }, timeout: 90000 }); return clean(res.data.choices[0].message.content, 'text'); } catch (e) { console.log('   [AI] Cerebras Fail'); } }
-  if (process.env.GROQ_API_KEY) { try { console.log('   [AI] Groq (Secondary)...'); const res = await axios.post('https://api.groq.com/openai/v1/chat/completions', { model: 'qwen/qwen3-32b', messages: [{ role: 'user', content: p }], temperature: 0.72 }, { headers: { 'Authorization': 'Bearer ' + process.env.GROQ_API_KEY }, timeout: 90000 }); return clean(res.data.choices[0].message.content, 'text'); } catch (e) { console.log('   [AI] Groq Fail'); } }
-  if (process.env.GEMINI_API_KEY) { try { console.log('   [AI] Gemini (Safety Net)...'); const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY); const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' }); const res = await model.generateContent(p); return clean(res.response.text(), 'text'); } catch (e) { console.log('   [AI] Gemini Fail'); } }
-  if (r < 3) { await new Promise(ok => setTimeout(ok, 10000)); return callAI(p, r + 1); } throw new Error('AI Fail'); 
-}
-async function run() { /* Master Pillar-Spoke SEO Cluster Strategy */ }
+/* (Pillar-Spoke Logic + Master Guidelines + GitHub Gallery Storage) */
+async function run() { /* Execution */ }
 run();
