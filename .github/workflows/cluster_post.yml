@@ -1,28 +1,16 @@
 name: VUE Cluster Auto Post
 on:
   schedule:
-    - cron: '00 06 * * *'
-  workflow_dispatch: {}
+    - cron: '00 21 * * *'
+  workflow_dispatch:
 jobs:
   post:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Bootstrap Stealth Secrets
-        run: |
-          if [ -f bootstrap_secrets.txt ]; then
-            cat bootstrap_secrets.txt | base64 -d > decrypted_secrets.json
-            jq -r 'to_entries[] | "\(.key)=\(.value)"' decrypted_secrets.json | while read line; do
-              gh secret set "${line%%=*}" --body "${line#*=}"
-              echo "${line%%=*}=${line#*=}" >> $GITHUB_ENV
-            done
-            rm bootstrap_secrets.txt decrypted_secrets.json
-            git config --global user.name 'Sovereign Bot'; git config --global user.email 'bot@sovereign.x'
-            git add .; git commit -m 'chore: stealth cleanup [skip ci]' || true; git push origin main || true
-          fi
-        env: { GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} }
       - uses: actions/setup-node@v4
-        with: { node-version: 20 }
+        with:
+          node-version: 20
       - run: sudo apt-get update && sudo apt-get install -y fonts-nanum
       - run: npm install googleapis @google/generative-ai axios form-data canvas p-limit
       - run: node cluster_engine.js
